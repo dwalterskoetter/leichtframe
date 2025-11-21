@@ -17,7 +17,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore
+      - name: Restore Dependencies
         run: dotnet restore
 
       - name: Build
@@ -26,22 +26,11 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release
 
-      - name: Pack
-        run: dotnet pack --no-build -c Release -o nupkgs
-
-  license-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Install License Tool
+      - name: Install License Check Tool
         run: dotnet tool install --global dotnet-project-licenses
 
-      - name: Check Licenses
-
+      - name: Check for Non-Open-Source Licenses
         run: dotnet-project-licenses -i . --allowed-license-types "MIT;Apache-2.0;BSD-3-Clause;BSD-2-Clause;ISC"
+
+      - name: Pack
+        run: dotnet pack --no-build -c Release -o nupkgs
