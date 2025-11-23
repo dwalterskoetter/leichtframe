@@ -32,4 +32,6 @@ public class SimpleMockColumn<T> : Column<T>
     public override void SetNull(int index) => _nulls[index] = true;
 
     public override void SetNotNull(int index) => _nulls[index] = false;
+
+    public override void EnsureCapacity(int capacity) { }
 }

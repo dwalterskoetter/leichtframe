@@ -28,4 +28,7 @@ public abstract class Column<T> : Column
 
     /// Marks the value at the index as valid (not null).
     public abstract void SetNotNull(int index);
+
+    /// Implementation for IColumn<T>.AsSpan
+    public virtual ReadOnlySpan<T> AsSpan() => Values.Span;
 }
