@@ -4,7 +4,7 @@ namespace LeichtFrame.Core;
 
 /// Typed base class for columns.
 /// The type of data stored (int, double, string, etc.)
-public abstract class Column<T> : Column
+public abstract class Column<T> : Column, IColumn<T>
 {
     protected Column(string name) : base(name, typeof(T))
     {

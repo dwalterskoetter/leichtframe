@@ -6,9 +6,11 @@ namespace LeichtFrame.Core;
 /// Allows storing columns of different types in a single collection.
 public abstract class Column : IColumn
 {
+    // Properties
     public string Name { get; }
     public Type DataType { get; }
 
+    // Constructor
     protected Column(string name, Type dataType)
     {
         if (string.IsNullOrWhiteSpace(name))
