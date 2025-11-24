@@ -4,7 +4,7 @@ namespace LeichtFrame.Core;
 
 /// Typed base class for columns.
 /// The type of data stored (int, double, string, etc.)
-public abstract class Column<T> : Column
+public abstract class Column<T> : Column, IColumn<T>
 {
     protected Column(string name) : base(name, typeof(T))
     {
@@ -28,4 +28,7 @@ public abstract class Column<T> : Column
 
     /// Marks the value at the index as valid (not null).
     public abstract void SetNotNull(int index);
+
+    /// Implementation for IColumn<T>.AsSpan
+    public virtual ReadOnlySpan<T> AsSpan() => Values.Span;
 }

@@ -2,15 +2,15 @@
 
 namespace LeichtFrame.Core;
 
-/// <summary>
 /// The non-generic base class for all columns. 
 /// Allows storing columns of different types in a single collection.
-/// </summary>
-public abstract class Column
+public abstract class Column : IColumn
 {
+    // Properties
     public string Name { get; }
     public Type DataType { get; }
 
+    // Constructor
     protected Column(string name, Type dataType)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -20,10 +20,9 @@ public abstract class Column
         DataType = dataType ?? throw new ArgumentNullException(nameof(dataType));
     }
 
-    /// <summary>
     /// Number of rows in this column.
-    /// </summary>
     public abstract int Length { get; }
 
     // We will add non-generic GetValue methods here later if needed (object GetValue(int index))
+    public abstract void EnsureCapacity(int capacity);
 }

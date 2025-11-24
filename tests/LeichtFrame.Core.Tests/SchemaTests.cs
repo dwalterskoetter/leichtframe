@@ -1,8 +1,3 @@
-using Xunit;
-using LeichtFrame.Core;
-using System;
-using System.Collections.Generic;
-
 namespace LeichtFrame.Core.Tests;
 
 public class SchemaTests
