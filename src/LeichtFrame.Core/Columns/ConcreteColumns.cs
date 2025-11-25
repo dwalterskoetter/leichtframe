@@ -2,24 +2,8 @@ using System;
 
 namespace LeichtFrame.Core
 {
-    // STUBS for A.1.3 - Final logic gets implemented with A.2
-
-    // Example for IntColumn
-    public class IntColumn : Column<int>
-    {
-        public IntColumn(string name, int capacity = 0) : base(name) { }
-
-        public override int Length => 0; // Stub
-        public override ReadOnlyMemory<int> Values => ReadOnlyMemory<int>.Empty; // Stub
-
-        public override int GetValue(int index) => 0;
-        public override void SetValue(int index, int value) { }
-        public override void EnsureCapacity(int capacity) { } // Stub
-
-        public override bool IsNull(int index) => false;
-        public override void SetNull(int index) { }
-        public override void SetNotNull(int index) { }
-    }
+    // STUBS for concrete column types.
+    // These do not implement any storage or functionality.
 
     public class DoubleColumn : Column<double>
     {

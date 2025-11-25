@@ -6,7 +6,7 @@ namespace LeichtFrame.Core;
 /// The type of data stored (int, double, string, etc.)
 public abstract class Column<T> : Column, IColumn<T>
 {
-    protected Column(string name) : base(name, typeof(T))
+    protected Column(string name, bool isNullable = false) : base(name, typeof(T), isNullable)
     {
     }
 

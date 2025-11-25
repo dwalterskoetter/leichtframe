@@ -8,8 +8,7 @@ namespace LeichtFrame.Core
         string Name { get; }
         Type DataType { get; }
         int Length { get; }
-
-        /// Ensures the column has space for at least the specified number of elements.
+        bool IsNullable { get; }
         void EnsureCapacity(int capacity);
     }
 
