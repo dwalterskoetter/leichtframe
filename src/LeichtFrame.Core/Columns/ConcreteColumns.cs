@@ -17,17 +17,4 @@ namespace LeichtFrame.Core
         public override void SetNull(int index) { }
         public override void SetNotNull(int index) { }
     }
-
-    public class BoolColumn : Column<bool>
-    {
-        public BoolColumn(string name, int capacity = 0) : base(name) { }
-        public override int Length => 0;
-        public override ReadOnlyMemory<bool> Values => ReadOnlyMemory<bool>.Empty;
-        public override bool GetValue(int index) => false;
-        public override void SetValue(int index, bool value) { }
-        public override void EnsureCapacity(int capacity) { }
-        public override bool IsNull(int index) => false;
-        public override void SetNull(int index) { }
-        public override void SetNotNull(int index) { }
-    }
 }
