@@ -19,6 +19,9 @@ namespace LeichtFrame.Core
             if (type == typeof(string))
                 return new StringColumn(name, capacity);
 
+            if (type == typeof(DateTime))
+                return new DateTimeColumn(name, capacity);
+
             throw new NotSupportedException($"Type {type.Name} is not supported yet.");
         }
 
