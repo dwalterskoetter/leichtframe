@@ -9,20 +9,19 @@ public abstract class Column : IColumn
     // Properties
     public string Name { get; }
     public Type DataType { get; }
+    public bool IsNullable { get; }
 
     // Constructor
-    protected Column(string name, Type dataType)
+    protected Column(string name, Type dataType, bool isNullable)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Column name cannot be null or empty.", nameof(name));
 
         Name = name;
         DataType = dataType ?? throw new ArgumentNullException(nameof(dataType));
+        IsNullable = isNullable;
     }
 
-    /// Number of rows in this column.
     public abstract int Length { get; }
-
-    // We will add non-generic GetValue methods here later if needed (object GetValue(int index))
     public abstract void EnsureCapacity(int capacity);
 }
