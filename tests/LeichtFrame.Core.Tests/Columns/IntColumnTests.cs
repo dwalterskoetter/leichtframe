@@ -1,7 +1,3 @@
-using System;
-using Xunit;
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.Columns
 {
     public class IntColumnTests
@@ -20,25 +16,25 @@ namespace LeichtFrame.Core.Tests.Columns
         public void SetValue_And_GetValue_Work()
         {
             using var col = new IntColumn("Test", 10);
-            col.Append(0); // Dummy init for Length 1
+            col.Append(0);
 
             col.SetValue(0, 42);
-            Assert.Equal(42, col.GetValue(0));
+
+            Assert.Equal(42, col.Get(0));
         }
 
         [Fact]
         public void Append_Resizes_Automatically()
         {
-            // Start with capacity 2
             using var col = new IntColumn("Test", capacity: 2);
 
             col.Append(1);
             col.Append(2);
-            col.Append(3); // Here it must resize
+            col.Append(3);
 
             Assert.Equal(3, col.Length);
-            Assert.Equal(1, col.GetValue(0));
-            Assert.Equal(3, col.GetValue(2));
+            Assert.Equal(1, col.Get(0));
+            Assert.Equal(3, col.Get(2));
         }
 
         [Fact]
@@ -55,27 +51,26 @@ namespace LeichtFrame.Core.Tests.Columns
         {
             using var col = new IntColumn("Nullable", 10, isNullable: true);
 
-            col.Append(10);       // Index 0
-            col.Append((int?)null); // Index 1
+            col.Append(10);
+            col.Append((int?)null);
 
             Assert.False(col.IsNull(0));
             Assert.True(col.IsNull(1));
 
-            // Default value for null is usually 0 (default(int)) in the buffer
-            Assert.Equal(0, col.GetValue(1));
+            Assert.Equal(0, col.Get(1));
         }
 
         [Fact]
         public void SetValue_Clears_Null_Flag()
         {
             using var col = new IntColumn("Nullable", 10, isNullable: true);
-            col.Append((int?)null); // Create null
+            col.Append((int?)null);
             Assert.True(col.IsNull(0));
 
-            col.SetValue(0, 99); // Overwrite with value
+            col.SetValue(0, 99);
 
             Assert.False(col.IsNull(0));
-            Assert.Equal(99, col.GetValue(0));
+            Assert.Equal(99, col.Get(0));
         }
 
         [Fact]
@@ -86,10 +81,7 @@ namespace LeichtFrame.Core.Tests.Columns
 
             col.Dispose();
 
-            // Check if accessing after dispose throws (which it should, since _data is null)
-            // Note: Behavior after accessing disposed object is not strictly defined,
-            // but NullReferenceException is expected since we set _data = null.
-            Assert.ThrowsAny<Exception>(() => col.GetValue(0));
+            Assert.ThrowsAny<Exception>(() => col.Get(0));
         }
     }
 }

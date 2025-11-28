@@ -1,6 +1,3 @@
-using Xunit;
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.Columns
 {
     public class DoubleColumnTests
@@ -30,7 +27,7 @@ namespace LeichtFrame.Core.Tests.Columns
 
             // Index 0: Not Null, but value is NaN
             Assert.False(col.IsNull(0));
-            Assert.True(double.IsNaN(col.GetValue(0)));
+            Assert.True(double.IsNaN(col.Get(0)));
 
             // Index 1: Is Null
             Assert.True(col.IsNull(1));

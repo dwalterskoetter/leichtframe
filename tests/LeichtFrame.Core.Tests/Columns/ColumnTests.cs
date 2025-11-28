@@ -34,9 +34,9 @@ public class ColumnTests
         col.SetValue(2, 100);
 
         // Assert
-        Assert.Equal(42, col.GetValue(0));
-        Assert.Equal(0, col.GetValue(1));
-        Assert.Equal(100, col.GetValue(2));
+        Assert.Equal(42, col.Get(0));
+        Assert.Equal(0, col.Get(1));
+        Assert.Equal(100, col.Get(2));
     }
 
     [Fact]

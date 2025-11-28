@@ -43,7 +43,7 @@ namespace LeichtFrame.Core
 
         // --- Core Access ---
 
-        public override string? GetValue(int index)
+        public override string? Get(int index)
         {
             CheckBounds(index);
             // Consistency check: If Bitmap says null, we return null regardless of what's in _data

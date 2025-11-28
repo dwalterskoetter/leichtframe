@@ -1,7 +1,3 @@
-using System;
-using Xunit;
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.Columns
 {
     public class DateTimeColumnTests
@@ -17,8 +13,8 @@ namespace LeichtFrame.Core.Tests.Columns
             col.Append(tomorrow);
 
             Assert.Equal(2, col.Length);
-            Assert.Equal(now, col.GetValue(0));
-            Assert.Equal(tomorrow, col.GetValue(1));
+            Assert.Equal(now, col.Get(0));
+            Assert.Equal(tomorrow, col.Get(1));
         }
 
         [Fact]
@@ -33,8 +29,7 @@ namespace LeichtFrame.Core.Tests.Columns
             Assert.False(col.IsNull(0));
             Assert.True(col.IsNull(1));
 
-            // Value at null index should be default(DateTime)
-            Assert.Equal(default(DateTime), col.GetValue(1));
+            Assert.Equal(default(DateTime), col.Get(1));
         }
 
         [Fact]
@@ -43,10 +38,10 @@ namespace LeichtFrame.Core.Tests.Columns
             using var col = new DateTimeColumn("Resize", 2);
             col.Append(new DateTime(2023, 1, 1));
             col.Append(new DateTime(2023, 1, 2));
-            col.Append(new DateTime(2023, 1, 3)); // Triggers resize
+            col.Append(new DateTime(2023, 1, 3));
 
             Assert.Equal(3, col.Length);
-            Assert.Equal(new DateTime(2023, 1, 3), col.GetValue(2));
+            Assert.Equal(new DateTime(2023, 1, 3), col.Get(2));
         }
 
         [Fact]
