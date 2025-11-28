@@ -1,5 +1,3 @@
-using System;
-
 namespace LeichtFrame.Core
 {
     /// Non-generic interface for column metadata and management.
@@ -17,6 +15,7 @@ namespace LeichtFrame.Core
     {
         T GetValue(int index);
         void SetValue(int index, T value);
+        ReadOnlyMemory<T> Slice(int start, int length);
 
         // Useful for zero-copy access later
         ReadOnlySpan<T> AsSpan();

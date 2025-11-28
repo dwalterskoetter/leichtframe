@@ -1,5 +1,3 @@
-using System;
-
 namespace LeichtFrame.Core;
 
 /// Typed base class for columns.
@@ -28,6 +26,21 @@ public abstract class Column<T> : Column, IColumn<T>
 
     /// Marks the value at the index as valid (not null).
     public abstract void SetNotNull(int index);
+
+    public virtual ReadOnlyMemory<T> Slice(int start, int length)
+    {
+        // 1. Bounds Safety
+        if ((uint)start > (uint)Length || (uint)length > (uint)(Length - start))
+        {
+            throw new ArgumentOutOfRangeException(nameof(start),
+                $"Slice range {start}..{start + length} is out of bounds (Length: {Length}).");
+        }
+
+        // 2. Zero-Copy Delegation
+        // Calls the 'Values' property of the concrete class (IntColumn, DoubleColumn, etc.)
+        // and uses .NET built-in slicing for Memory<T>.
+        return Values.Slice(start, length);
+    }
 
     /// Implementation for IColumn<T>.AsSpan
     public virtual ReadOnlySpan<T> AsSpan() => Values.Span;
