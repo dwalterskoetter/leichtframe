@@ -1,7 +1,3 @@
-using System;
-using Xunit;
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.Columns
 {
     public class StringColumnTests
@@ -14,8 +10,8 @@ namespace LeichtFrame.Core.Tests.Columns
             col.Append("Bob");
 
             Assert.Equal(2, col.Length);
-            Assert.Equal("Alice", col.GetValue(0));
-            Assert.Equal("Bob", col.GetValue(1));
+            Assert.Equal("Alice", col.Get(0));
+            Assert.Equal("Bob", col.Get(1));
         }
 
         [Fact]
@@ -27,7 +23,7 @@ namespace LeichtFrame.Core.Tests.Columns
 
             Assert.False(col.IsNull(0));
             Assert.True(col.IsNull(1));
-            Assert.Null(col.GetValue(1));
+            Assert.Null(col.Get(1));
         }
 
         [Fact]
@@ -45,8 +41,8 @@ namespace LeichtFrame.Core.Tests.Columns
             col.Append(s1);
             col.Append(s2);
 
-            string? out1 = col.GetValue(0);
-            string? out2 = col.GetValue(1);
+            string? out1 = col.Get(0);
+            string? out2 = col.Get(1);
 
             // After interning, they should point to the same object
             Assert.True(object.ReferenceEquals(out1, out2));

@@ -20,7 +20,7 @@ namespace LeichtFrame.Core
         public override ReadOnlyMemory<double> Values => new ReadOnlyMemory<double>(_data, 0, _length);
 
         // --- Core Data Access ---
-        public override double GetValue(int index)
+        public override double Get(int index)
         {
             CheckBounds(index);
             return _data[index];

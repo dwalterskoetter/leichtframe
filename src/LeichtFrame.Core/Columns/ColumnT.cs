@@ -12,7 +12,13 @@ public abstract class Column<T> : Column, IColumn<T>
     public abstract ReadOnlyMemory<T> Values { get; }
 
     /// Gets the value at the specified index.
-    public abstract T GetValue(int index);
+    public abstract T Get(int index);
+    T IColumn<T>.GetValue(int index) => Get(index);
+    public override object? GetValue(int index)
+    {
+        if (IsNullable && IsNull(index)) return null;
+        return Get(index);
+    }
 
     /// Sets the value at the specified index.
     public abstract void SetValue(int index, T value);

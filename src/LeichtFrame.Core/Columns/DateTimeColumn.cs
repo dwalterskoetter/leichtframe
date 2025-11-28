@@ -28,7 +28,7 @@ namespace LeichtFrame.Core
 
         // --- Core Access ---
 
-        public override DateTime GetValue(int index)
+        public override DateTime Get(int index)
         {
             CheckBounds(index);
             return _data[index];

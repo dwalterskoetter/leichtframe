@@ -8,12 +8,13 @@ namespace LeichtFrame.Core
         int Length { get; }
         bool IsNullable { get; }
         void EnsureCapacity(int capacity);
+        object? GetValue(int index);
     }
 
     /// Typed interface for high-performance data access.
     public interface IColumn<T> : IColumn
     {
-        T GetValue(int index);
+        new T GetValue(int index);
         void SetValue(int index, T value);
         ReadOnlyMemory<T> Slice(int start, int length);
 

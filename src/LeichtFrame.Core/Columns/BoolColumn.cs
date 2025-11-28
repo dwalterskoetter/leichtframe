@@ -35,7 +35,7 @@ namespace LeichtFrame.Core
 
         // --- Core Data Access ---
 
-        public override bool GetValue(int index)
+        public override bool Get(int index)
         {
             CheckBounds(index);
             // byteIndex = index / 8, bitIndex = index % 8
@@ -127,7 +127,7 @@ namespace LeichtFrame.Core
                 // 2. Check remaining bits
                 for (int i = fullBytes * 8; i < _length; i++)
                 {
-                    if (GetValue(i)) return true;
+                    if (Get(i)) return true;
                 }
                 return false;
             }
@@ -137,7 +137,7 @@ namespace LeichtFrame.Core
                 // (Could be optimized with bitwise ops between _data and _nulls, but complex due to byte vs ulong mismatch)
                 for (int i = 0; i < _length; i++)
                 {
-                    if (!IsNull(i) && GetValue(i)) return true;
+                    if (!IsNull(i) && Get(i)) return true;
                 }
                 return false;
             }
@@ -163,7 +163,7 @@ namespace LeichtFrame.Core
                 // 2. Check remaining bits
                 for (int i = fullBytes * 8; i < _length; i++)
                 {
-                    if (!GetValue(i)) return false;
+                    if (!Get(i)) return false;
                 }
                 return true;
             }
@@ -172,7 +172,7 @@ namespace LeichtFrame.Core
                 // Nullable path
                 for (int i = 0; i < _length; i++)
                 {
-                    if (!IsNull(i) && !GetValue(i)) return false;
+                    if (!IsNull(i) && !Get(i)) return false;
                 }
                 return true;
             }

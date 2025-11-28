@@ -1,7 +1,3 @@
-using System;
-using Xunit;
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.Columns
 {
     public class SliceTests

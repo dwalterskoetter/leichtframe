@@ -32,7 +32,7 @@ namespace LeichtFrame.Core
 
         // --- Core Get/Set ---
 
-        public override int GetValue(int index)
+        public override int Get(int index)
         {
             CheckBounds(index);
             // In a real scenario, you might want to check IsNull(index) here 

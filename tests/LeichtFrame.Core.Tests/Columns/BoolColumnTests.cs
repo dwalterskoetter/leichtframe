@@ -1,7 +1,3 @@
-using System;
-using Xunit;
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.Columns
 {
     public class BoolColumnTests
@@ -19,13 +15,13 @@ namespace LeichtFrame.Core.Tests.Columns
             col.SetValue(7, true);
             col.SetValue(8, true);
 
-            Assert.True(col.GetValue(0));
-            Assert.True(col.GetValue(7));
-            Assert.True(col.GetValue(8));
+            Assert.True(col.Get(0));
+            Assert.True(col.Get(7));
+            Assert.True(col.Get(8));
 
-            Assert.False(col.GetValue(1));
-            Assert.False(col.GetValue(6));
-            Assert.False(col.GetValue(9));
+            Assert.False(col.Get(1));
+            Assert.False(col.Get(6));
+            Assert.False(col.Get(9));
         }
 
         [Fact]
@@ -80,9 +76,9 @@ namespace LeichtFrame.Core.Tests.Columns
             col.Append(false); // Trigger resize to 2nd byte
 
             Assert.Equal(9, col.Length);
-            Assert.True(col.GetValue(0));
-            Assert.True(col.GetValue(7));
-            Assert.False(col.GetValue(8));
+            Assert.True(col.Get(0));
+            Assert.True(col.Get(7));
+            Assert.False(col.Get(8));
         }
     }
 }
