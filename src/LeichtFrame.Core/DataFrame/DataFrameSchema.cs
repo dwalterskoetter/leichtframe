@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 
 namespace LeichtFrame.Core;
@@ -54,7 +51,7 @@ public class DataFrameSchema
             Columns = _columns.Select(c => new ColumnDto
             {
                 Name = c.Name,
-                DataTypeName = c.DataType.AssemblyQualifiedName ?? c.DataType.FullName,
+                DataTypeName = c.DataType.AssemblyQualifiedName ?? c.DataType.FullName ?? c.DataType.Name,
                 IsNullable = c.IsNullable
             }).ToList()
         };
