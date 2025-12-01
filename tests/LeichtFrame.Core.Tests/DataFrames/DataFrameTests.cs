@@ -164,5 +164,50 @@ namespace LeichtFrame.Core.Tests.DataFrames
 
             Assert.Equal(1, df.RowCount);
         }
+
+        [Fact]
+        public void ToString_Returns_Short_Summary()
+        {
+            var df = DataFrame.Create(new DataFrameSchema(new[] { new ColumnDefinition("A", typeof(int)) }), 5);
+            // Wir fügen keine Daten hinzu, Kapazität ist 5, aber Length ist 0 (weil nicht appended)
+            // Moment: Create allocatet Capacity, aber Length ist 0. 
+            // Also Append wir 1 Row.
+            ((IntColumn)df["A"]).Append(100);
+
+            Assert.Equal("DataFrame (1 rows, 1 columns)", df.ToString());
+        }
+
+        [Fact]
+        public void Inspect_Formats_Output_Correctly()
+        {
+            // Arrange
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("ID", typeof(int)),
+                new ColumnDefinition("Name", typeof(string), IsNullable: true)
+            });
+            var df = DataFrame.Create(schema, 10);
+
+            var idCol = (IntColumn)df["ID"];
+            var nameCol = (StringColumn)df["Name"];
+
+            idCol.Append(1); nameCol.Append("Alice");
+            idCol.Append(2); nameCol.Append(null); // Test null display
+
+            // Act
+            string output = df.Inspect();
+
+            // Assert
+            // 1. Header & Types
+            Assert.Contains("ID", output);
+            Assert.Contains("Name", output);
+            Assert.Contains("<Int32>", output);
+            Assert.Contains("<String>", output);
+
+            // 2. Data content
+            Assert.Contains("1", output);
+            Assert.Contains("Alice", output);
+            Assert.Contains("2", output);
+            Assert.Contains("null", output); // Should explicitly show "null"
+        }
     }
 }
