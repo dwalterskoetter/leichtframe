@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace LeichtFrame.Core
 {
     public class DataFrame : IDisposable
@@ -23,6 +25,97 @@ namespace LeichtFrame.Core
             }
 
             return new DataFrame(columns);
+        }
+
+        /// <summary>
+        /// Returns a short summary of the DataFrame (e.g., "DataFrame (1000 rows, 5 columns)").
+        /// </summary>
+        public override string ToString()
+        {
+            return $"DataFrame ({RowCount} rows, {ColumnCount} columns)";
+        }
+
+        /// <summary>
+        /// Generates a formatted string representing the first N rows of the DataFrame.
+        /// Useful for console output and debugging.
+        /// </summary>
+        /// <param name="limit">The maximum number of rows to display (default 10).</param>
+        public string Inspect(int limit = 10)
+        {
+            if (ColumnCount == 0) return "Empty DataFrame";
+
+            var sb = new StringBuilder();
+            sb.AppendLine(ToString());
+            sb.AppendLine(new string('-', 30));
+
+            int rowsToShow = Math.Min(RowCount, limit);
+
+            // 1. Calculate optimal column widths based on Header and Visible Data
+            int[] widths = new int[ColumnCount];
+            for (int c = 0; c < ColumnCount; c++)
+            {
+                var col = _columns[c];
+                int maxWidth = col.Name.Length;
+
+                // Consider type name length (e.g., <Int32>)
+                maxWidth = Math.Max(maxWidth, col.DataType.Name.Length + 2);
+
+                // Scan visible data for width
+                for (int r = 0; r < rowsToShow; r++)
+                {
+                    object? val = col.GetValue(r);
+                    int len = val?.ToString()?.Length ?? 4; // 4 for "null"
+                    if (len > maxWidth) maxWidth = len;
+                }
+
+                // Limit to a reasonable max (e.g., 50 characters) to prevent console overflow
+                widths[c] = Math.Min(maxWidth, 50) + 2; // +2 Padding
+            }
+
+            // 2. Print Header (Names)
+            for (int c = 0; c < ColumnCount; c++)
+            {
+                sb.Append(_columns[c].Name.PadRight(widths[c]));
+            }
+            sb.AppendLine();
+
+            // 3. Print Header (Types)
+            for (int c = 0; c < ColumnCount; c++)
+            {
+                string typeStr = $"<{_columns[c].DataType.Name}>";
+                sb.Append(typeStr.PadRight(widths[c]));
+            }
+            sb.AppendLine();
+
+            // Separator line based on total width
+            int totalWidth = widths.Sum();
+            sb.AppendLine(new string('-', totalWidth));
+
+            // 4. Print Rows
+            for (int r = 0; r < rowsToShow; r++)
+            {
+                for (int c = 0; c < ColumnCount; c++)
+                {
+                    object? val = _columns[c].GetValue(r);
+                    string valStr = val is null ? "null" : val.ToString() ?? "";
+
+                    // Truncate if too long (Visual Safety)
+                    if (valStr.Length > widths[c] - 1)
+                        valStr = valStr.Substring(0, widths[c] - 4) + "...";
+
+                    sb.Append(valStr.PadRight(widths[c]));
+                }
+                sb.AppendLine();
+            }
+
+            // 5. Footer hint
+            if (RowCount > limit)
+            {
+                sb.AppendLine(new string('-', 20));
+                sb.AppendLine($"... ({RowCount - limit} more rows)");
+            }
+
+            return sb.ToString();
         }
 
         private readonly List<IColumn> _columns;
