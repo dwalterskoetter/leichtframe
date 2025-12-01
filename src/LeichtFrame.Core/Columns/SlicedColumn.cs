@@ -94,5 +94,22 @@ namespace LeichtFrame.Core
             if ((uint)index >= (uint)_length)
                 throw new IndexOutOfRangeException($"Index {index} is out of slice bounds (Length {_length})");
         }
+
+        public IColumn CloneSubset(IReadOnlyList<int> indices)
+        {
+            // We have to map the indices to the original column (sourceIndex + _offset)
+            var mappedIndices = new int[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+            {
+                // Bounds check relative to the slice
+                if (indices[i] < 0 || indices[i] >= _length)
+                    throw new IndexOutOfRangeException();
+
+                mappedIndices[i] = indices[i] + _offset;
+            }
+
+            // Delegate to the original column
+            return _source.CloneSubset(mappedIndices);
+        }
     }
 }

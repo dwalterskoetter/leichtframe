@@ -20,6 +20,11 @@ namespace LeichtFrame.Core
         /// </summary>
         void EnsureCapacity(int capacity);
         object? GetValue(int index);
+
+        /// <summary>
+        /// Creates a deep copy of the column containing only the rows at the specified indices.
+        /// </summary>
+        IColumn CloneSubset(IReadOnlyList<int> indices);
     }
 
     /// Typed interface for high-performance data access.
