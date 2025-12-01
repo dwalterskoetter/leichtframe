@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core.Tests.DataFrame
+namespace LeichtFrame.Core.Tests.DataFrames
 {
     public class RowViewTests
     {

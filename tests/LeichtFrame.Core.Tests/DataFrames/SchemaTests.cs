@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core.Tests;
+namespace LeichtFrame.Core.Tests.DataFrames;
 
 public class SchemaTests
 {

@@ -1,0 +1,85 @@
+namespace LeichtFrame.Core
+{
+    public class DataFrame : IDisposable
+    {
+        private readonly List<IColumn> _columns;
+        private bool _isDisposed;
+
+        /// <summary>
+        /// Gets the schema definition of this DataFrame.
+        /// </summary>
+        public DataFrameSchema Schema { get; }
+
+        /// <summary>
+        /// Gets the internal list of columns.
+        /// </summary>
+        public IReadOnlyList<IColumn> Columns => _columns;
+
+        /// <summary>
+        /// Gets the number of rows in the DataFrame.
+        /// </summary>
+        public int RowCount => _columns.Count > 0 ? _columns[0].Length : 0;
+
+        /// <summary>
+        /// Gets the number of columns in the DataFrame.
+        /// </summary>
+        public int ColumnCount => _columns.Count;
+
+        /// <summary>
+        /// Creates a new DataFrame from the provided columns.
+        /// Validates that all columns share the same length.
+        /// </summary>
+        public DataFrame(IEnumerable<IColumn> columns)
+        {
+            if (columns == null) throw new ArgumentNullException(nameof(columns));
+
+            _columns = columns.ToList();
+
+            // 1. Validation: Row Count Consistency
+            if (_columns.Count > 0)
+            {
+                int expectedLength = _columns[0].Length;
+                for (int i = 1; i < _columns.Count; i++)
+                {
+                    if (_columns[i].Length != expectedLength)
+                    {
+                        throw new ArgumentException(
+                            $"Column length mismatch. Column '{_columns[i].Name}' has length {_columns[i].Length}, " +
+                            $"but expected {expectedLength} (from '{_columns[0].Name}').");
+                    }
+                }
+            }
+
+            // 2. Build Schema automatically from column metadata
+            var definitions = _columns.Select(c => new ColumnDefinition(c.Name, c.DataType, c.IsNullable));
+            Schema = new DataFrameSchema(definitions);
+        }
+
+        /// <summary>
+        /// Disposes all contained columns, returning their memory to the pool.
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_isDisposed) return;
+
+            if (disposing)
+            {
+                foreach (var col in _columns)
+                {
+                    // Check if the column implements IDisposable (our concrete columns do)
+                    if (col is IDisposable disposableCol)
+                    {
+                        disposableCol.Dispose();
+                    }
+                }
+            }
+            _isDisposed = true;
+        }
+    }
+}
