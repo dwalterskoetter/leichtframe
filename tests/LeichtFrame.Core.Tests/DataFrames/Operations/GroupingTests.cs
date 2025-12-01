@@ -75,5 +75,79 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
             Assert.Equal(2, grouped.GroupMap[10].Count); // Group 10 has 2 entries
             Assert.Single(grouped.GroupMap[20]); // Group 20 has exactly 1 entry
         }
+
+        [Fact]
+        public void Group_Count_Returns_Correct_DataFrame()
+        {
+            var df = DataFrame.Create(new DataFrameSchema(new[] { new ColumnDefinition("Dept", typeof(string)) }), 10);
+            var col = (StringColumn)df["Dept"];
+            col.Append("IT");
+            col.Append("Sales");
+            col.Append("IT");
+
+            var result = df.GroupBy("Dept").Count();
+
+            Assert.Equal(2, result.RowCount);
+
+            // Verify Structure
+            Assert.Equal("Dept", result.Columns[0].Name);
+            Assert.Equal("Count", result.Columns[1].Name);
+
+            // Verify Data (Order is not guaranteed with HashMap, so we find rows)
+            // Simpler check for MVP:
+            // "IT" -> 2, "Sales" -> 1
+
+            // Quick workaround to verify content without Order-dependency logic:
+            var itRow = result.Where(r => r.Get<string>("Dept") == "IT");
+            Assert.Equal(2, itRow["Count"].Get<int>(0));
+        }
+
+        [Fact]
+        public void Group_Sum_Calculates_Totals()
+        {
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Val", typeof(double))
+            });
+            var df = DataFrame.Create(schema, 10);
+
+            var id = (IntColumn)df["Id"];
+            var val = (DoubleColumn)df["Val"];
+
+            // Group 1: 10 + 20 = 30
+            id.Append(1); val.Append(10.0);
+            id.Append(1); val.Append(20.0);
+
+            // Group 2: 5 = 5
+            id.Append(2); val.Append(5.0);
+
+            var result = df.GroupBy("Id").Sum("Val");
+
+            Assert.Equal(2, result.RowCount);
+
+            // Check Sum for ID 1
+            var g1 = result.Where(r => r.Get<int>("Id") == 1);
+            Assert.Equal(30.0, g1["Sum_Val"].Get<double>(0));
+        }
+
+        [Fact]
+        public void Group_Sum_Handles_Null_Values_In_Data()
+        {
+            var df = DataFrame.Create(new DataFrameSchema(new[] {
+                new ColumnDefinition("G", typeof(string)),
+                new ColumnDefinition("V", typeof(int), IsNullable: true)
+            }), 5);
+
+            var g = (StringColumn)df["G"];
+            var v = (IntColumn)df["V"];
+
+            g.Append("A"); v.Append(10);
+            g.Append("A"); v.Append(null); // Should be ignored
+            g.Append("A"); v.Append(5);
+
+            var result = df.GroupBy("G").Sum("V");
+
+            Assert.Equal(15.0, result["Sum_V"].Get<double>(0));
+        }
     }
 }
