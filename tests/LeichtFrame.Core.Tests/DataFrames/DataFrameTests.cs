@@ -39,10 +39,10 @@ namespace LeichtFrame.Core.Tests.DataFrames
         [Fact]
         public void Dispose_Calls_Dispose_On_Columns()
         {
-            // Da wir schwer in die Columns "hineinschauen" können ob sie disposed sind (ohne Crash),
-            // testen wir hier primär, dass df.Dispose() keine Fehler wirft.
-            // Einen echten "wurde Dispose gerufen" Test bräuchte man Mocks (Moq), 
-            // aber wir nutzen hier echte Klassen.
+            // As we find it difficult to "look inside" the columns to check if they are disposed (without crashing),
+            // we primarily test here that df.Dispose() does not throw any errors.
+            // A real "was Dispose called" test would require mocks (Moq), 
+            // but we use real classes here.
 
             var col = new IntColumn("Temp", 10);
             col.Append(1);
@@ -51,8 +51,8 @@ namespace LeichtFrame.Core.Tests.DataFrames
 
             df.Dispose();
 
-            // Indirekter Beweis: Zugriff auf die Column sollte jetzt unsicher sein 
-            // (oder bei IntColumn in A.2 Implementierung: _data ist null).
+            // Indirect proof: Accessing the column should now be unsafe 
+            // (or in IntColumn in A.2 implementation: _data is null).
             Assert.ThrowsAny<Exception>(() => col.Get(0));
         }
 
@@ -143,7 +143,7 @@ namespace LeichtFrame.Core.Tests.DataFrames
             var df = DataFrame.Create(schema, capacity: 100);
 
             // 3. Verify Basics
-            Assert.Equal(0, df.RowCount); // Muss leer sein
+            Assert.Equal(0, df.RowCount); // Must be empty
             Assert.Equal(3, df.ColumnCount);
 
             // 4. Verify Columns match Schema
@@ -169,9 +169,9 @@ namespace LeichtFrame.Core.Tests.DataFrames
         public void ToString_Returns_Short_Summary()
         {
             var df = DataFrame.Create(new DataFrameSchema(new[] { new ColumnDefinition("A", typeof(int)) }), 5);
-            // Wir fügen keine Daten hinzu, Kapazität ist 5, aber Length ist 0 (weil nicht appended)
-            // Moment: Create allocatet Capacity, aber Length ist 0. 
-            // Also Append wir 1 Row.
+            // We do not add any data, capacity is 5, but length is 0 (because not appended)
+            // Wait: Create allocates capacity, but length is 0. 
+            // So we append 1 row.
             ((IntColumn)df["A"]).Append(100);
 
             Assert.Equal("DataFrame (1 rows, 1 columns)", df.ToString());
