@@ -65,5 +65,68 @@ namespace LeichtFrame.Core.Tests.DataFrames
             Assert.Equal(0, df.ColumnCount);
             Assert.NotNull(df.Schema);
         }
+
+        [Fact]
+        public void Indexer_By_Int_Returns_Correct_Column()
+        {
+            using var col1 = new IntColumn("Col1", 5);
+            using var col2 = new IntColumn("Col2", 5);
+            var df = new DataFrame(new[] { col1, col2 });
+
+            Assert.Same(col1, df[0]);
+            Assert.Same(col2, df[1]);
+        }
+
+        [Fact]
+        public void Indexer_By_Int_Throws_On_Invalid_Index()
+        {
+            var df = new DataFrame(new IColumn[0]);
+            Assert.Throws<ArgumentOutOfRangeException>(() => df[0]);
+        }
+
+        [Fact]
+        public void Indexer_By_Name_Returns_Correct_Column()
+        {
+            using var age = new IntColumn("Age", 5);
+            using var name = new StringColumn("Name", 5);
+            var df = new DataFrame(new IColumn[] { age, name });
+
+            Assert.Same(age, df["Age"]);
+            Assert.Same(name, df["Name"]);
+        }
+
+        [Fact]
+        public void Indexer_By_Name_Throws_If_Missing()
+        {
+            using var col = new IntColumn("Data", 5);
+            var df = new DataFrame(new[] { col });
+
+            // Exception comes from Schema.GetColumnIndex
+            Assert.Throws<ArgumentException>(() => df["Missing"]);
+        }
+
+        [Fact]
+        public void TryGetColumn_Returns_False_If_Missing()
+        {
+            using var col = new IntColumn("Data", 5);
+            var df = new DataFrame(new[] { col });
+
+            bool found = df.TryGetColumn("Missing", out var result);
+
+            Assert.False(found);
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void TryGetColumn_Returns_True_And_Column_If_Found()
+        {
+            using var col = new IntColumn("Data", 5);
+            var df = new DataFrame(new[] { col });
+
+            bool found = df.TryGetColumn("Data", out var result);
+
+            Assert.True(found);
+            Assert.Same(col, result);
+        }
     }
 }

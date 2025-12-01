@@ -55,6 +55,42 @@ namespace LeichtFrame.Core
             Schema = new DataFrameSchema(definitions);
         }
 
+        // <summary>
+        /// Gets the column at the specified index.
+        /// </summary>
+        public IColumn this[int index] => _columns[index];
+
+        /// <summary>
+        /// Gets the column with the specified name.
+        /// Throws <see cref="ArgumentException"/> if the column does not exist.
+        /// </summary>
+        public IColumn this[string name]
+        {
+            get
+            {
+                // Schema lookup handles the exception if name is missing
+                int index = Schema.GetColumnIndex(name);
+                return _columns[index];
+            }
+        }
+
+        /// <summary>
+        /// Tries to get the column with the specified name.
+        /// Returns true if found, otherwise false.
+        /// </summary>
+        public bool TryGetColumn(string name, out IColumn? column)
+        {
+            if (Schema.HasColumn(name))
+            {
+                int index = Schema.GetColumnIndex(name);
+                column = _columns[index];
+                return true;
+            }
+
+            column = null;
+            return false;
+        }
+
         /// <summary>
         /// Disposes all contained columns, returning their memory to the pool.
         /// </summary>
