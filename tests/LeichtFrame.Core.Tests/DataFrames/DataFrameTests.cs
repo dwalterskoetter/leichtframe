@@ -128,5 +128,41 @@ namespace LeichtFrame.Core.Tests.DataFrames
             Assert.True(found);
             Assert.Same(col, result);
         }
+
+        [Fact]
+        public void Create_Factory_Builds_Correct_Structure_From_Schema()
+        {
+            // 1. Define Schema (Blueprint)
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int), IsNullable: false),
+                new ColumnDefinition("Value", typeof(double), IsNullable: true),
+                new ColumnDefinition("Label", typeof(string))
+            });
+
+            // 2. Create via Factory
+            var df = DataFrame.Create(schema, capacity: 100);
+
+            // 3. Verify Basics
+            Assert.Equal(0, df.RowCount); // Muss leer sein
+            Assert.Equal(3, df.ColumnCount);
+
+            // 4. Verify Columns match Schema
+            // Check ID
+            var idCol = df["Id"];
+            Assert.IsType<IntColumn>(idCol);
+            Assert.False(idCol.IsNullable);
+
+            // Check Value
+            var valCol = df["Value"];
+            Assert.IsType<DoubleColumn>(valCol);
+            Assert.True(valCol.IsNullable);
+
+            // 5. Verify Capacity (indirectly via functionality)
+            ((IntColumn)idCol).Append(1);
+            ((DoubleColumn)valCol).Append(null);
+            ((StringColumn)df["Label"]).Append("Test");
+
+            Assert.Equal(1, df.RowCount);
+        }
     }
 }

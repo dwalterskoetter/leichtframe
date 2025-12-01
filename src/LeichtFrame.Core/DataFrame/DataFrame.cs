@@ -2,6 +2,29 @@ namespace LeichtFrame.Core
 {
     public class DataFrame : IDisposable
     {
+        /// <summary>
+        /// Creates a new, empty DataFrame based on the provided schema.
+        /// Pre-allocates memory for the specified capacity to minimize resize operations.
+        /// </summary>
+        /// <param name="schema">The schema defining the columns.</param>
+        /// <param name="capacity">The initial capacity (number of rows) to reserve.</param>
+        /// <returns>A new DataFrame instance.</returns>
+        public static DataFrame Create(DataFrameSchema schema, int capacity = 16)
+        {
+            if (schema == null) throw new ArgumentNullException(nameof(schema));
+            if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity));
+
+            var columns = new List<IColumn>(schema.Columns.Count);
+
+            foreach (var colDef in schema.Columns)
+            {
+                var col = ColumnFactory.Create(colDef.Name, colDef.DataType, capacity, colDef.IsNullable);
+                columns.Add(col);
+            }
+
+            return new DataFrame(columns);
+        }
+
         private readonly List<IColumn> _columns;
         private bool _isDisposed;
 
