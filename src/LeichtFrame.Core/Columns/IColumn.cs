@@ -20,6 +20,8 @@ namespace LeichtFrame.Core
         /// </summary>
         void EnsureCapacity(int capacity);
         object? GetValue(int index);
+        bool IsNull(int index);
+        void SetNull(int index);
 
         /// <summary>
         /// Creates a deep copy of the column containing only the rows at the specified indices.

@@ -26,4 +26,6 @@ public abstract class Column : IColumn
     public abstract void EnsureCapacity(int capacity);
     public abstract object? GetValue(int index);
     public abstract IColumn CloneSubset(IReadOnlyList<int> indices);
+    public abstract bool IsNull(int index);
+    public abstract void SetNull(int index);
 }

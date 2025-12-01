@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 
 namespace LeichtFrame.Core
@@ -205,6 +206,62 @@ namespace LeichtFrame.Core
 
             column = null;
             return false;
+        }
+
+        /// <summary>
+        /// Creates a DataFrame from a collection of objects using Reflection.
+        /// Public properties of T become columns.
+        /// </summary>
+        public static DataFrame FromObjects<T>(IEnumerable<T> objects)
+        {
+            if (objects == null) throw new ArgumentNullException(nameof(objects));
+
+            // 1. Analyze Type T to build Schema
+            var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            var colDefs = new List<ColumnDefinition>();
+            var propMap = new Dictionary<string, PropertyInfo>();
+
+            foreach (var prop in properties)
+            {
+                Type type = prop.PropertyType;
+                bool isNullable = !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
+
+                // Unbox Nullable<T> to T (e.g. int? -> int) for the column type
+                Type coreType = Nullable.GetUnderlyingType(type) ?? type;
+
+                // Simple type check: We only support our core types for now
+                if (coreType != typeof(int) && coreType != typeof(double) &&
+                    coreType != typeof(string) && coreType != typeof(bool) &&
+                    coreType != typeof(DateTime))
+                {
+                    continue; // Skip unsupported complex types (e.g. nested classes)
+                }
+
+                colDefs.Add(new ColumnDefinition(prop.Name, coreType, isNullable));
+                propMap[prop.Name] = prop;
+            }
+
+            if (colDefs.Count == 0)
+                throw new ArgumentException($"Type '{typeof(T).Name}' has no supported public properties.");
+
+            // 2. Create DataFrame container
+            // We verify collection size if possible to pre-allocate
+            int estimatedCount = objects is ICollection<T> coll ? coll.Count : 16;
+            var schema = new DataFrameSchema(colDefs);
+            var df = DataFrame.Create(schema, estimatedCount);
+
+            // 3. Populate Data
+            foreach (var item in objects)
+            {
+                foreach (var col in df.Columns)
+                {
+                    var prop = propMap[col.Name];
+                    object? val = prop.GetValue(item);
+                    col.AppendObject(val);
+                }
+            }
+
+            return df;
         }
 
         /// <summary>
