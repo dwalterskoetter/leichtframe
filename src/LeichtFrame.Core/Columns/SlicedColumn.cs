@@ -111,5 +111,18 @@ namespace LeichtFrame.Core
             // Delegate to the original column
             return _source.CloneSubset(mappedIndices);
         }
+
+        public bool IsNull(int index)
+        {
+            CheckBounds(index);
+            return _source.IsNull(index + _offset);
+        }
+
+        public void SetNull(int index)
+        {
+            CheckBounds(index);
+            // Write-through to original
+            _source.SetNull(index + _offset);
+        }
     }
 }

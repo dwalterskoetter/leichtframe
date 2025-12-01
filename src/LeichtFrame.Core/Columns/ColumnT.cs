@@ -25,10 +25,10 @@ public abstract class Column<T> : Column, IColumn<T>
 
     // --- Null Handling API ---
     /// Checks if the value at the index is logically null.
-    public abstract bool IsNull(int index);
+    public abstract override bool IsNull(int index);
 
     /// Marks the value at the index as null.
-    public abstract void SetNull(int index);
+    public abstract override void SetNull(int index);
 
     /// Marks the value at the index as valid (not null).
     public abstract void SetNotNull(int index);
