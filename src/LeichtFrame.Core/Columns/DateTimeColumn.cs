@@ -115,6 +115,27 @@ namespace LeichtFrame.Core
                 throw new IndexOutOfRangeException($"Index {index} is out of range.");
         }
 
+        public override IColumn CloneSubset(IReadOnlyList<int> indices)
+        {
+            // Create new column with exact size (no unnecessary resizing)
+            var newCol = new DateTimeColumn(Name, indices.Count, IsNullable);
+
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int sourceIndex = indices[i];
+                if (IsNullable && IsNull(sourceIndex))
+                {
+                    newCol.Append(null);
+                }
+                else
+                {
+                    // Get(i) is fast (no boxing)
+                    newCol.Append(Get(sourceIndex));
+                }
+            }
+            return newCol;
+        }
+
         public void Dispose()
         {
             if (_data != null)

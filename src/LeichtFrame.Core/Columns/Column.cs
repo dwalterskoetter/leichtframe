@@ -25,4 +25,5 @@ public abstract class Column : IColumn
     public abstract int Length { get; }
     public abstract void EnsureCapacity(int capacity);
     public abstract object? GetValue(int index);
+    public abstract IColumn CloneSubset(IReadOnlyList<int> indices);
 }
