@@ -49,5 +49,48 @@ namespace LeichtFrame.IO.Tests
             Assert.Equal("Alice", df["Name"].Get<string>(0));
             Assert.Equal("Bob", df["Name"].Get<string>(1));
         }
+
+        [Fact]
+        public void Roundtrip_DataFrame_ToArrow_ToDataFrame_Preserves_Data()
+        {
+            // Arrange
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Val", typeof(double), IsNullable: true),
+                new ColumnDefinition("Flag", typeof(bool)),
+                new ColumnDefinition("Text", typeof(string))
+            });
+
+            var original = DataFrame.Create(schema, 2);
+
+            var cId = (IntColumn)original["Id"];
+            var cVal = (DoubleColumn)original["Val"];
+            var cFlag = (BoolColumn)original["Flag"];
+            var cText = (StringColumn)original["Text"];
+
+            cId.Append(1); cVal.Append(1.1); cFlag.Append(true); cText.Append("A");
+            cId.Append(2); cVal.Append(null); cFlag.Append(false); cText.Append("B");
+
+            // Act 1: Export to Arrow
+            var batch = original.ToArrow();
+
+            // Assert Arrow Structure (Basic check)
+            Assert.Equal(2, batch.Length);
+            Assert.Equal(4, batch.ColumnCount);
+            Assert.IsType<Int32Array>(batch.Column("Id"));
+            Assert.IsType<DoubleArray>(batch.Column("Val"));
+
+            // Act 2: Import back to DataFrame
+            var loaded = batch.ToDataFrame();
+
+            // Assert Data Integrity
+            Assert.Equal(1, loaded["Id"].Get<int>(0));
+            Assert.Equal(1.1, loaded["Val"].Get<double>(0));
+            Assert.True(loaded["Flag"].Get<bool>(0));
+            Assert.Equal("A", loaded["Text"].Get<string>(0));
+
+            Assert.True(loaded["Val"].IsNull(1)); // Check Null preservation
+            Assert.False(loaded["Flag"].Get<bool>(1));
+        }
     }
 }

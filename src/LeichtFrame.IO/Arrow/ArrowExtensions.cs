@@ -12,5 +12,13 @@ namespace LeichtFrame.IO
         {
             return ArrowConverter.ToDataFrame(batch);
         }
+
+        /// <summary>
+        /// Converts the DataFrame to an Arrow RecordBatch.
+        /// </summary>
+        public static RecordBatch ToArrow(this DataFrame df)
+        {
+            return ArrowConverter.ToRecordBatch(df);
+        }
     }
 }
