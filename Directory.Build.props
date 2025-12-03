@@ -1,0 +1,26 @@
+<Project>
+  <PropertyGroup>
+    <!-- Product Information -->
+    <Version>0.1.0-alpha</Version>
+    <Authors>The LeichtFrame Authors</Authors>
+    <Company>LeichtFrame Open Source</Company>
+    <Product>LeichtFrame</Product>
+    <Description>A lightweight, high-performance DataFrame engine for .NET optimized for backend services.</Description>
+    <Copyright>Copyright (c) 2025 The LeichtFrame Authors</Copyright>
+
+    <!-- Links & License -->
+    <RepositoryUrl>https://github.com/dwalterskoetter/leichtFrame</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>dataframe;data;analysis;csv;parquet;performance;span;memory</PackageTags>
+    <PackageProjectUrl>https://github.com/dwalterskoetter/leichtFrame</PackageProjectUrl>
+    
+    <!-- Build Settings -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+</Project>
