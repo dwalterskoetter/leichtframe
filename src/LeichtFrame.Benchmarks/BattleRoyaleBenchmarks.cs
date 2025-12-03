@@ -1,110 +1,150 @@
 using BenchmarkDotNet.Attributes;
-
-// Your Library
+using BenchmarkDotNet.Jobs;
 using LeichtFrame.Core;
-
-// The Competitor (Alias 'MDA')
 using MDA = Microsoft.Data.Analysis;
 
 namespace LeichtFrame.Benchmarks
 {
+    public record DataItem(int Id, int Val);
+
+    [SimpleJob(RuntimeMoniker.Net80)]
     [MemoryDiagnoser]
     public class BattleRoyaleBenchmarks
     {
         [Params(1_000_000)]
         public int N;
 
-        // 1. LINQ
-        private List<int> _linqList = null!;
+        // --- LINQ ---
+        private List<int> _linqRawInts = null!;
+        private List<DataItem> _linqObjs = null!;
+        private List<DataItem> _linqObjsRight = null!;
 
-        // 2. LeichtFrame
+        // --- LeichtFrame ---
         private LeichtFrame.Core.DataFrame _lfFrame = null!;
+        private LeichtFrame.Core.DataFrame _lfFrameRight = null!;
 
-        // 3. Microsoft Data Analysis
+        // --- Microsoft ---
         private MDA.DataFrame _mdaFrame = null!;
+        private MDA.DataFrame _mdaFrameRight = null!;
 
         [GlobalSetup]
         public void Setup()
         {
-            // --- Generate Data ---
-            var data = new int[N];
             var rnd = new Random(42);
-            for (int i = 0; i < N; i++) data[i] = rnd.Next(100);
+            var dataIds = new int[N];
+            var dataVals = new int[N];
 
-            // 1. Setup LINQ
-            _linqList = new List<int>(data);
+            for (int i = 0; i < N; i++)
+            {
+                dataIds[i] = i;
+                dataVals[i] = rnd.Next(100);
+            }
 
-            // 2. Setup LeichtFrame
-            var schema = new DataFrameSchema(new[] { new ColumnDefinition("Val", typeof(int)) });
-            _lfFrame = LeichtFrame.Core.DataFrame.Create(schema, N);
-            var lfCol = (IntColumn)_lfFrame["Val"];
-            foreach (var val in data) lfCol.Append(val);
+            // --- 1. LINQ Setup ---
+            _linqRawInts = new List<int>(dataVals);
+            _linqObjs = dataIds.Zip(dataVals, (id, val) => new DataItem(id, val)).ToList();
+            _linqObjsRight = new List<DataItem>(_linqObjs);
 
-            // 3. Setup Microsoft.Data.Analysis
-            // MDA uses "PrimitiveDataFrameColumn" for int
-            var mdaCol = new MDA.PrimitiveDataFrameColumn<int>("Val", N);
-            for (int i = 0; i < N; i++) mdaCol[i] = data[i];
-            _mdaFrame = new MDA.DataFrame(mdaCol);
+            // --- 2. LeichtFrame Setup ---
+            // Schema Links
+            var schemaLeft = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Val", typeof(int))
+            });
+
+            // Schema Rechts
+            var schemaRight = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Val_Right", typeof(int))
+            });
+
+            _lfFrame = LeichtFrame.Core.DataFrame.Create(schemaLeft, N);
+            var lfId = (IntColumn)_lfFrame["Id"];
+            var lfVal = (IntColumn)_lfFrame["Val"];
+
+            _lfFrameRight = LeichtFrame.Core.DataFrame.Create(schemaRight, N);
+            var lfIdR = (IntColumn)_lfFrameRight["Id"];
+            var lfValR = (IntColumn)_lfFrameRight["Val_Right"];
+
+            // Append
+            for (int i = 0; i < N; i++)
+            {
+                lfId.Append(dataIds[i]);
+                lfVal.Append(dataVals[i]);
+
+                lfIdR.Append(dataIds[i]);
+                lfValR.Append(dataVals[i]);
+            }
+
+            // --- 3. Microsoft Setup ---
+            var mdaId = new MDA.PrimitiveDataFrameColumn<int>("Id", N);
+            var mdaVal = new MDA.PrimitiveDataFrameColumn<int>("Val", N);
+            for (int i = 0; i < N; i++) { mdaId[i] = dataIds[i]; mdaVal[i] = dataVals[i]; }
+            _mdaFrame = new MDA.DataFrame(mdaId, mdaVal);
+
+            var mdaIdR = new MDA.PrimitiveDataFrameColumn<int>("Id", N);
+            var mdaValR = new MDA.PrimitiveDataFrameColumn<int>("Val", N);
+            for (int i = 0; i < N; i++) { mdaIdR[i] = dataIds[i]; mdaValR[i] = dataVals[i]; }
+            _mdaFrameRight = new MDA.DataFrame(mdaIdR, mdaValR);
         }
 
         [GlobalCleanup]
         public void Cleanup()
         {
             _lfFrame.Dispose();
-            // MDA has no Dispose for DataFrame, relies on GC
+            _lfFrameRight.Dispose();
         }
 
-        // --- ROUND 1: Calculation Speed (Sum) ---
+        // --- AGGREGATION ---
+        [Benchmark(Description = "Sum (Agg)")]
+        public double Agg_LeichtFrame() => _lfFrame.Sum("Val");
 
-        [Benchmark(Baseline = true)]
-        public long Calc_LINQ()
+        [Benchmark(Baseline = true, Description = "Sum (LINQ List<int>)")]
+        public long Agg_LINQ_Raw() => _linqRawInts.Sum(x => (long)x);
+
+        [Benchmark(Description = "Sum (MS Data Analysis)")]
+        public double Agg_Microsoft()
         {
-            return _linqList.Sum(x => (long)x);
+            return Convert.ToDouble(_mdaFrame["Val"].Sum());
         }
 
-        [Benchmark]
-        public double Calc_LeichtFrame()
+        // --- FILTER ---
+        [Benchmark(Description = "Filter (Where > 50)")]
+        public object Filter_LeichtFrame() => _lfFrame.Where(row => row.Get<int>("Val") > 50);
+
+        [Benchmark(Description = "Filter (LINQ Objects)")]
+        public object Filter_LINQ_Obj() => _linqObjs.Where(x => x.Val > 50).ToList();
+
+        [Benchmark(Description = "Filter (MS Data Analysis)")]
+        public object Filter_Microsoft()
         {
-            return _lfFrame.Sum("Val");
+            var col = _mdaFrame.Columns["Val"];
+            var boolFilter = col.ElementwiseGreaterThan(50);
+            return _mdaFrame.Filter(boolFilter);
         }
 
-        [Benchmark]
-        public double Calc_Microsoft()
+        // --- JOIN ---
+        [Benchmark(Description = "Join (Inner on Id)")]
+        public object Join_LeichtFrame()
         {
-            // MDA API is similar, but sometimes uses dynamic calls internally in Sum()
-            // Since MDA.DataFrame["Val"] returns an abstract Column,
-            // we might need to cast to PrimitiveDataFrameColumn for speed?
-            // We use the standard API.
-            return (double)_mdaFrame["Val"].Sum();
+            return _lfFrame.Join(_lfFrameRight, "Id", JoinType.Inner);
         }
 
-        // --- ROUND 2: Memory Efficiency (Creation) ---
-        // Note: We measure creation including data population
-
-        [Benchmark]
-        public List<int> Create_LINQ()
+        [Benchmark(Description = "Join (LINQ Objects)")]
+        public object Join_LINQ_Obj()
         {
-            var list = new List<int>(N);
-            for (int i = 0; i < N; i++) list.Add(i);
-            return list;
+            return _linqObjs.Join(
+                _linqObjsRight,
+                left => left.Id,
+                right => right.Id,
+                (left, right) => new { Left = left, Right = right }
+            ).ToList();
         }
 
-        [Benchmark]
-        public LeichtFrame.Core.DataFrame Create_LeichtFrame()
+        [Benchmark(Description = "Join (MS Data Analysis)")]
+        public object Join_Microsoft()
         {
-            var schema = new DataFrameSchema(new[] { new ColumnDefinition("Val", typeof(int)) });
-            var df = LeichtFrame.Core.DataFrame.Create(schema, N);
-            var col = (IntColumn)df["Val"];
-            for (int i = 0; i < N; i++) col.Append(i);
-            return df;
-        }
-
-        [Benchmark]
-        public MDA.DataFrame Create_Microsoft()
-        {
-            var col = new MDA.PrimitiveDataFrameColumn<int>("Val", N);
-            for (int i = 0; i < N; i++) col[i] = i;
-            return new MDA.DataFrame(col);
+            return _mdaFrame.Merge(_mdaFrameRight, new[] { "Id" }, new[] { "Id" });
         }
     }
 }
