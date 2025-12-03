@@ -75,6 +75,15 @@ public class DataFrameSchema
         return new DataFrameSchema(definitions);
     }
 
+    /// <summary>
+    /// Helper to get the type of a column by name.
+    /// </summary>
+    public Type GetColumnType(string name)
+    {
+        int index = GetColumnIndex(name); // Wirft Fehler, wenn nicht gefunden
+        return _columns[index].DataType;
+    }
+
     // --- Private Helper Classes for JSON ---
     private class SchemaDto
     {
