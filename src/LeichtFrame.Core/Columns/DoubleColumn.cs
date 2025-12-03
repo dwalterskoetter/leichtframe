@@ -33,7 +33,7 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
-        public void Append(double value)
+        public override void Append(double value)
         {
             EnsureCapacity(_length + 1);
             _data[_length] = value;
@@ -52,7 +52,7 @@ namespace LeichtFrame.Core
             else
             {
                 if (_nulls == null) throw new InvalidOperationException("Cannot append null to non-nullable column.");
-                _data[_length] = double.NaN; // Visual marker, truth is in bitmap
+                _data[_length] = double.NaN;
                 _nulls.SetNull(_length);
             }
             _length++;
@@ -115,7 +115,7 @@ namespace LeichtFrame.Core
                     hasValue = true;
                 }
             }
-            return hasValue ? min : 0; // Or NaN/Exception based on policy
+            return hasValue ? min : 0;
         }
 
         public double Max()
@@ -158,7 +158,6 @@ namespace LeichtFrame.Core
 
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
-            // Create new column with exact size (no unnecessary resizing)
             var newCol = new DoubleColumn(Name, indices.Count, IsNullable);
 
             for (int i = 0; i < indices.Count; i++)
@@ -170,7 +169,6 @@ namespace LeichtFrame.Core
                 }
                 else
                 {
-                    // Get(i) is fast (no boxing)
                     newCol.Append(Get(sourceIndex));
                 }
             }

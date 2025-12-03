@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 
 namespace LeichtFrame.Core
 {
@@ -20,10 +18,6 @@ namespace LeichtFrame.Core
             _length = 0;
             _data = ArrayPool<string?>.Shared.Rent(capacity);
 
-            // Note: Strings from pool might be dirty, but since we manage _length, we just overwrite them.
-            // However, strictly cleaning is better for security/debugging, but slower. 
-            // We rely on overwrite for active range.
-
             if (isNullable)
             {
                 _nulls = new NullBitmap(capacity);
@@ -38,7 +32,6 @@ namespace LeichtFrame.Core
 
         public override int Length => _length;
 
-        // Note: Returns array containing potential nulls.
         public override ReadOnlyMemory<string?> Values => new ReadOnlyMemory<string?>(_data, 0, _length);
 
         // --- Core Access ---
@@ -46,7 +39,6 @@ namespace LeichtFrame.Core
         public override string? Get(int index)
         {
             CheckBounds(index);
-            // Consistency check: If Bitmap says null, we return null regardless of what's in _data
             if (_nulls != null && _nulls.IsNull(index)) return null;
             return _data[index];
         }
@@ -61,7 +53,6 @@ namespace LeichtFrame.Core
                 return;
             }
 
-            // Interning Logic
             if (_useInterning && _internPool != null)
             {
                 if (!_internPool.TryGetValue(value, out var interned))
@@ -82,7 +73,7 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
-        public void Append(string? value)
+        public override void Append(string? value)
         {
             EnsureCapacity(_length + 1);
 
@@ -131,7 +122,7 @@ namespace LeichtFrame.Core
             CheckBounds(index);
             if (_nulls == null) throw new InvalidOperationException("Cannot set null on non-nullable column.");
 
-            _data[index] = null; // Remove reference for GC
+            _data[index] = null;
             _nulls.SetNull(index);
         }
 
@@ -139,41 +130,6 @@ namespace LeichtFrame.Core
         {
             CheckBounds(index);
             _nulls?.SetNotNull(index);
-        }
-
-        // --- Memory Estimation ---
-
-        /// Estimates the memory usage in bytes (Heap size).
-        /// Includes array overhead + string content sizes.
-        public long EstimateMemoryUsage()
-        {
-            long total = 0;
-
-            // 1. Array References (8 bytes per pointer on 64-bit)
-            total += _data.Length * IntPtr.Size;
-
-            // 2. NullBitmap
-            // (Approximated, internal details are hidden but ~ capacity/8)
-            if (_nulls != null) total += _data.Length / 8;
-
-            // 3. String Content
-            // Overhead per string object ~24 bytes + (Length * 2 bytes for UTF16)
-            for (int i = 0; i < _length; i++)
-            {
-                var s = _data[i];
-                if (s != null)
-                {
-                    total += 24 + (s.Length * 2);
-                }
-            }
-
-            // 4. Intern Pool overhead (rough estimate)
-            if (_internPool != null)
-            {
-                total += _internPool.Count * 64; // Dict Entry overhead
-            }
-
-            return total;
         }
 
         // --- Memory Management ---
@@ -187,7 +143,6 @@ namespace LeichtFrame.Core
             var newBuffer = ArrayPool<string?>.Shared.Rent(newCapacity);
             Array.Copy(_data, newBuffer, _length);
 
-            // Important: Clear old buffer before returning to prevent memory leaks!
             Array.Clear(_data, 0, _data.Length);
             ArrayPool<string?>.Shared.Return(_data);
 
@@ -203,7 +158,6 @@ namespace LeichtFrame.Core
 
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
-            // Create new column with exact size (no unnecessary resizing)
             var newCol = new StringColumn(Name, indices.Count, IsNullable);
 
             for (int i = 0; i < indices.Count; i++)
@@ -215,7 +169,6 @@ namespace LeichtFrame.Core
                 }
                 else
                 {
-                    // Get(i) is fast (no boxing)
                     newCol.Append(Get(sourceIndex));
                 }
             }
@@ -226,7 +179,6 @@ namespace LeichtFrame.Core
         {
             if (_data != null)
             {
-                // Vital: Clear references so GC can collect the strings
                 Array.Clear(_data, 0, _data.Length);
                 ArrayPool<string?>.Shared.Return(_data);
                 _data = null!;

@@ -1,53 +1,82 @@
+using System.Globalization;
+
 namespace LeichtFrame.Core;
 
-/// Typed base class for columns.
-/// The type of data stored (int, double, string, etc.)
+/// <summary>
+/// Typed base class for columns storing specific data types (int, double, string, etc.).
+/// </summary>
 public abstract class Column<T> : Column, IColumn<T>
 {
     protected Column(string name, bool isNullable = false) : base(name, typeof(T), isNullable)
     {
     }
 
-    /// Access to the underlying memory storage.
     public abstract ReadOnlyMemory<T> Values { get; }
 
-    /// Gets the value at the specified index.
     public abstract T Get(int index);
+    public abstract void SetValue(int index, T value);
+
+    // --- Interface Implementations ---
+
     T IColumn<T>.GetValue(int index) => Get(index);
+
     public override object? GetValue(int index)
     {
         if (IsNullable && IsNull(index)) return null;
         return Get(index);
     }
 
-    /// Sets the value at the specified index.
-    public abstract void SetValue(int index, T value);
+    // --- Appending ---
 
-    // --- Null Handling API ---
-    /// Checks if the value at the index is logically null.
+    public abstract void Append(T value);
+
+    // WICHTIG: Hier muss 'override' stehen, da es in 'Column' abstract ist.
+    public override void AppendObject(object? value)
+    {
+        if (value is T typedVal)
+        {
+            Append(typedVal);
+        }
+        else if (value is null)
+        {
+            if (!IsNullable)
+                throw new ArgumentException($"Cannot append null to non-nullable column '{Name}'.");
+
+            Append(default!);
+            SetNull(Length - 1);
+        }
+        else
+        {
+            try
+            {
+                var converted = (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);
+                Append(converted);
+            }
+            catch
+            {
+                throw new ArgumentException($"Cannot convert '{value}' to {typeof(T).Name}");
+            }
+        }
+    }
+
+    // --- Null Handling ---
+
     public abstract override bool IsNull(int index);
-
-    /// Marks the value at the index as null.
     public abstract override void SetNull(int index);
-
-    /// Marks the value at the index as valid (not null).
     public abstract void SetNotNull(int index);
+
+    // --- Slicing ---
 
     public virtual ReadOnlyMemory<T> Slice(int start, int length)
     {
-        // 1. Bounds Safety
         if ((uint)start > (uint)Length || (uint)length > (uint)(Length - start))
         {
             throw new ArgumentOutOfRangeException(nameof(start),
                 $"Slice range {start}..{start + length} is out of bounds (Length: {Length}).");
         }
 
-        // 2. Zero-Copy Delegation
-        // Calls the 'Values' property of the concrete class (IntColumn, DoubleColumn, etc.)
-        // and uses .NET built-in slicing for Memory<T>.
         return Values.Slice(start, length);
     }
 
-    /// Implementation for IColumn<T>.AsSpan
     public virtual ReadOnlySpan<T> AsSpan() => Values.Span;
 }

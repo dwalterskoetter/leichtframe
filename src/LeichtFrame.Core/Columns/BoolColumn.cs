@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 
@@ -14,10 +13,9 @@ namespace LeichtFrame.Core
             : base(name, isNullable)
         {
             _length = 0;
-            // Capacity / 8, round up
             int byteCount = (capacity + 7) >> 3;
             _data = ArrayPool<byte>.Shared.Rent(byteCount);
-            Array.Clear(_data, 0, byteCount); // Vital: Pool arrays are dirty
+            Array.Clear(_data, 0, byteCount);
 
             if (isNullable)
             {
@@ -27,9 +25,6 @@ namespace LeichtFrame.Core
 
         public override int Length => _length;
 
-        /// WARNING: Not supported for BoolColumn because data is bit-packed (1 bit per bool).
-        /// Returning a ReadOnlyMemory<bool> would require unpacking/copying, violating zero-copy principles.
-        /// Use GetValue(i) or AllTrue/AnyTrue instead.
         public override ReadOnlyMemory<bool> Values => throw new NotSupportedException(
             "BoolColumn uses bit-packed storage. Cannot return ReadOnlyMemory<bool>. Use GetValue or dedicated bulk methods.");
 
@@ -38,7 +33,6 @@ namespace LeichtFrame.Core
         public override bool Get(int index)
         {
             CheckBounds(index);
-            // byteIndex = index / 8, bitIndex = index % 8
             return (_data[index >> 3] & (1 << (index & 7))) != 0;
         }
 
@@ -61,7 +55,7 @@ namespace LeichtFrame.Core
                 _data[byteIndex] &= (byte)~bitMask;
         }
 
-        public void Append(bool value)
+        public override void Append(bool value)
         {
             EnsureCapacity(_length + 1);
             SetBit(_length, value);
@@ -80,7 +74,7 @@ namespace LeichtFrame.Core
             else
             {
                 if (_nulls == null) throw new InvalidOperationException("Cannot append null to non-nullable column.");
-                SetBit(_length, false); // Default to false
+                SetBit(_length, false);
                 _nulls.SetNull(_length);
             }
             _length++;
@@ -98,7 +92,7 @@ namespace LeichtFrame.Core
         {
             CheckBounds(index);
             if (_nulls == null) throw new InvalidOperationException("Cannot set null on non-nullable column.");
-            SetBit(index, false); // Clear bit for consistency
+            SetBit(index, false);
             _nulls.SetNull(index);
         }
 
@@ -110,21 +104,15 @@ namespace LeichtFrame.Core
 
         // --- Bulk Operations ---
 
-        /// Returns true if at least one value is true. Ignores nulls (null != true).
         public bool AnyTrue()
         {
-            // Optimization for Non-Nullable: Check bytes directly
             if (_nulls == null)
             {
                 int fullBytes = _length >> 3;
-
-                // 1. Check full bytes
                 for (int i = 0; i < fullBytes; i++)
                 {
                     if (_data[i] != 0) return true;
                 }
-
-                // 2. Check remaining bits
                 for (int i = fullBytes * 8; i < _length; i++)
                 {
                     if (Get(i)) return true;
@@ -133,8 +121,6 @@ namespace LeichtFrame.Core
             }
             else
             {
-                // Slow path for Nullable: Must check !IsNull && Value
-                // (Could be optimized with bitwise ops between _data and _nulls, but complex due to byte vs ulong mismatch)
                 for (int i = 0; i < _length; i++)
                 {
                     if (!IsNull(i) && Get(i)) return true;
@@ -143,24 +129,17 @@ namespace LeichtFrame.Core
             }
         }
 
-        /// Returns true if ALL values are true. Ignores nulls (skips them). 
-        /// Returns true if collection is empty.
         public bool AllTrue()
         {
             if (_length == 0) return true;
 
-            // Optimization for Non-Nullable
             if (_nulls == null)
             {
                 int fullBytes = _length >> 3;
-
-                // 1. Check full bytes (must be 0xFF / 255)
                 for (int i = 0; i < fullBytes; i++)
                 {
                     if (_data[i] != 0xFF) return false;
                 }
-
-                // 2. Check remaining bits
                 for (int i = fullBytes * 8; i < _length; i++)
                 {
                     if (!Get(i)) return false;
@@ -169,7 +148,6 @@ namespace LeichtFrame.Core
             }
             else
             {
-                // Nullable path
                 for (int i = 0; i < _length; i++)
                 {
                     if (!IsNull(i) && !Get(i)) return false;
@@ -187,19 +165,17 @@ namespace LeichtFrame.Core
 
             if (currentByteCap >= requiredByteCap) return;
 
-            // Double capacity strategy
             int newByteCap = Math.Max(currentByteCap * 2, requiredByteCap);
 
             var newBuffer = ArrayPool<byte>.Shared.Rent(newByteCap);
 
-            // Copy & Clear
-            Array.Copy(_data, newBuffer, (Length + 7) >> 3); // Copy only used bytes
-            Array.Clear(newBuffer, (Length + 7) >> 3, newByteCap - ((Length + 7) >> 3)); // Clear rest
+            Array.Copy(_data, newBuffer, (Length + 7) >> 3);
+            Array.Clear(newBuffer, (Length + 7) >> 3, newByteCap - ((Length + 7) >> 3));
 
             ArrayPool<byte>.Shared.Return(_data);
             _data = newBuffer;
 
-            _nulls?.Resize(minCapacity); // NullBitmap handles its own ulong logic
+            _nulls?.Resize(minCapacity);
         }
 
         private void CheckBounds(int index)
@@ -209,7 +185,6 @@ namespace LeichtFrame.Core
 
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
-            // Create new column with exact size (no unnecessary resizing)
             var newCol = new BoolColumn(Name, indices.Count, IsNullable);
 
             for (int i = 0; i < indices.Count; i++)
@@ -221,7 +196,6 @@ namespace LeichtFrame.Core
                 }
                 else
                 {
-                    // Get(i) is fast (no boxing)
                     newCol.Append(Get(sourceIndex));
                 }
             }

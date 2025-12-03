@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 
 namespace LeichtFrame.Core
@@ -23,7 +22,6 @@ namespace LeichtFrame.Core
 
         public override int Length => _length;
 
-        /// Returns a zero-copy span/memory of the dates.
         public override ReadOnlyMemory<DateTime> Values => new ReadOnlyMemory<DateTime>(_data, 0, _length);
 
         // --- Core Access ---
@@ -41,7 +39,7 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
-        public void Append(DateTime value)
+        public override void Append(DateTime value)
         {
             EnsureCapacity(_length + 1);
             _data[_length] = value;
@@ -49,6 +47,7 @@ namespace LeichtFrame.Core
             _length++;
         }
 
+        // Helper 
         public void Append(DateTime? value)
         {
             EnsureCapacity(_length + 1);
@@ -62,7 +61,7 @@ namespace LeichtFrame.Core
                 if (_nulls == null)
                     throw new InvalidOperationException("Cannot append null to non-nullable column.");
 
-                _data[_length] = default; // 0001-01-01
+                _data[_length] = default;
                 _nulls.SetNull(_length);
             }
             _length++;
@@ -117,7 +116,6 @@ namespace LeichtFrame.Core
 
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
-            // Create new column with exact size (no unnecessary resizing)
             var newCol = new DateTimeColumn(Name, indices.Count, IsNullable);
 
             for (int i = 0; i < indices.Count; i++)
@@ -129,7 +127,6 @@ namespace LeichtFrame.Core
                 }
                 else
                 {
-                    // Get(i) is fast (no boxing)
                     newCol.Append(Get(sourceIndex));
                 }
             }

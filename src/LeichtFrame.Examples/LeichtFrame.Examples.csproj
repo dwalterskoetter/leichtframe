@@ -5,6 +5,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LeichtFrame.Core\LeichtFrame.Core.csproj" />
+    <ProjectReference Include="..\LeichtFrame.IO\LeichtFrame.IO.csproj" />
+  </ItemGroup>
 
 </Project>
