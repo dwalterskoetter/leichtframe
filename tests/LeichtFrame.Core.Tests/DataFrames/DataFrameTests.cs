@@ -209,5 +209,33 @@ namespace LeichtFrame.Core.Tests.DataFrames
             Assert.Contains("2", output);
             Assert.Contains("null", output); // Should explicitly show "null"
         }
+
+        [Fact]
+        public void Schema_Inspection_API_Works()
+        {
+            // Arrange: DataFrame with known schema
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Age", typeof(int)),
+                new ColumnDefinition("Name", typeof(string))
+            });
+            var df = DataFrame.Create(schema, 0);
+
+            // 1. HasColumn
+            Assert.True(df.HasColumn("Age"));
+            Assert.True(df.HasColumn("Name"));
+            Assert.False(df.HasColumn("Salary"));
+            Assert.False(df.HasColumn(""));
+
+            // 2. GetColumnNames
+            var names = df.GetColumnNames();
+            Assert.Equal(new[] { "Age", "Name" }, names);
+
+            // 3. GetColumnType
+            Assert.Equal(typeof(int), df.GetColumnType("Age"));
+            Assert.Equal(typeof(string), df.GetColumnType("Name"));
+
+            // Error Case: Missing Column
+            Assert.Throws<ArgumentException>(() => df.GetColumnType("MissingCol"));
+        }
     }
 }

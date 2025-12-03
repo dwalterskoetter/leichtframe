@@ -290,5 +290,32 @@ namespace LeichtFrame.Core
             }
             _isDisposed = true;
         }
+
+        /// <summary>
+        /// Checks if a column with the given name exists in the DataFrame.
+        /// </summary>
+        public bool HasColumn(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            return Schema.HasColumn(name);
+        }
+
+        /// <summary>
+        /// Returns the names of all columns in the DataFrame.
+        /// </summary>
+        public IEnumerable<string> GetColumnNames()
+        {
+            return _columns.Select(c => c.Name);
+        }
+
+        /// <summary>
+        /// Returns the .NET Type of the data stored in the specified column.
+        /// Throws ArgumentException if the column does not exist.
+        /// </summary>
+        public Type GetColumnType(string name)
+        {
+            // We use the existing indexer, which already handles validation/exception
+            return this[name].DataType;
+        }
     }
 }
