@@ -24,7 +24,7 @@ namespace LeichtFrame.IO.Tests
             var names = new string[] { "Alice", "Bob" };
 
             using var stream = File.OpenWrite(path);
-            using var writer = await ParquetWriter.CreateAsync(schema, stream);
+            using var writer = await Parquet.ParquetWriter.CreateAsync(schema, stream);
             using var groupWriter = writer.CreateRowGroup();
 
             await groupWriter.WriteColumnAsync(new DataColumn(schema.DataFields[0], ids));

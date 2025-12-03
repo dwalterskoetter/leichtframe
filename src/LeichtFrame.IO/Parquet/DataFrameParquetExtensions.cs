@@ -1,14 +1,31 @@
+using LeichtFrame.Core;
+
 namespace LeichtFrame.IO
 {
     public static class DataFrameParquetExtensions
     {
-        // We do not actually need an extension on DataFrame for READ, 
-        // since READ is static (factory).
-        // But for consistency, we could prepare WriteParquet here.
+        /// <summary>
+        /// Writes the DataFrame to a Parquet file.
+        /// </summary>
+        public static void WriteParquet(this DataFrame df, string path)
+        {
+            ParquetWriter.Write(df, path);
+        }
 
-        // FFor ReadParquet, the call via ParquetReader.Read(...) is the clean way.
-        // If you want df.WriteParquet, that comes in C.2.2.
+        /// <summary>
+        /// Writes the DataFrame to a stream in Parquet format.
+        /// </summary>
+        public static void WriteParquet(this DataFrame df, Stream stream)
+        {
+            ParquetWriter.Write(df, stream);
+        }
 
-        // We leave the file empty or as a placeholder for the writer later.
+        /// <summary>
+        /// Writes the DataFrame to a stream asynchronously.
+        /// </summary>
+        public static Task WriteParquetAsync(this DataFrame df, Stream stream)
+        {
+            return ParquetWriter.WriteAsync(df, stream);
+        }
     }
 }
