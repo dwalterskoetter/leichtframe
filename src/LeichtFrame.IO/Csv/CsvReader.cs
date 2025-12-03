@@ -37,13 +37,10 @@ namespace LeichtFrame.IO
 
             while ((line = reader.ReadLine()) != null)
             {
-                // Simple Split (Warning: No support for quotes/escaping in MVP!)
-                var parts = line.Split(sep);
+                // FIX: Statt line.Split(sep) nutzen wir unseren Smart Splitter
+                var parts = SplitCsvLine(line, options.Separator[0]); // Annahme: Separator ist 1 Char
 
-                // Robustness: If line is too short, ignore or error? 
-                // MVP: We assume CSV is valid or crash on IndexOutOfRange.
-                // Better Fail-Fast:
-                if (parts.Length < columns.Length) continue; // Skip empty/broken lines
+                if (parts.Length < columns.Length) continue;
 
                 for (int i = 0; i < columns.Length; i++)
                 {
@@ -96,6 +93,59 @@ namespace LeichtFrame.IO
                 else
                     dtCol.Append(DateTime.Parse(raw, options.Culture));
             }
+        }
+
+        /// <summary>
+        /// Splits a CSV line respecting quotes (RFC 4180).
+        /// </summary>
+        private static string[] SplitCsvLine(string line, char separator)
+        {
+            var values = new System.Collections.Generic.List<string>();
+            int start = 0;
+            bool inQuotes = false;
+
+            for (int i = 0; i < line.Length; i++)
+            {
+                char c = line[i];
+
+                if (c == '\"')
+                {
+                    inQuotes = !inQuotes; // Toggle Status
+                }
+                else if (c == separator && !inQuotes)
+                {
+                    // Trennzeichen gefunden (und nicht innerhalb von Quotes)
+                    values.Add(Unescape(line.Substring(start, i - start)));
+                    start = i + 1;
+                }
+            }
+
+            // Letzten Wert hinzufügen
+            if (start <= line.Length)
+            {
+                values.Add(Unescape(line.Substring(start)));
+            }
+
+            return values.ToArray();
+        }
+
+        /// <summary>
+        /// Removes surrounding quotes and handles double-quote escaping.
+        /// </summary>
+        private static string Unescape(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+
+            // 1. Anführungszeichen entfernen, falls vorhanden
+            if (value.StartsWith("\"") && value.EndsWith("\"") && value.Length >= 2)
+            {
+                value = value.Substring(1, value.Length - 2);
+
+                // 2. Doppelte Quotes ("") zu einem (") machen
+                return value.Replace("\"\"", "\"");
+            }
+
+            return value;
         }
     }
 }
