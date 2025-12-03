@@ -42,5 +42,67 @@ namespace LeichtFrame.IO.Tests
             Assert.True(df["Val"].IsNull(1));
             Assert.Equal(200, df["Val"].Get<int>(2));
         }
+
+        [Fact]
+        public void InferSchema_Detects_Int_Double_And_String()
+        {
+            string csvFile = Path.GetTempFileName();
+            File.WriteAllText(csvFile, "Age,Weight,Name\n25,80.5,Alice\n30,90,Bob"); // 90 is int, 80.5 double
+
+            try
+            {
+                var schema = CsvReader.InferSchema(csvFile);
+
+                Assert.Equal(3, schema.Columns.Count);
+
+                // Age: Only ints -> int
+                Assert.Equal(typeof(int), schema.GetColumnType("Age"));
+
+                // Weight: Mixed double and int -> double (Promotion)
+                Assert.Equal(typeof(double), schema.GetColumnType("Weight"));
+
+                // Name: String
+                Assert.Equal(typeof(string), schema.GetColumnType("Name"));
+            }
+            finally
+            {
+                File.Delete(csvFile);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Detects_Nullability()
+        {
+            string csvFile = Path.GetTempFileName();
+            File.WriteAllText(csvFile, "Val\n100\n\n200");
+
+            try
+            {
+                var schema = CsvReader.InferSchema(csvFile);
+                Assert.Equal(typeof(int), schema.GetColumnType("Val"));
+                Assert.True(schema.Columns[0].IsNullable);
+            }
+            finally
+            {
+                File.Delete(csvFile);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Fallbacks_To_String_On_Conflict()
+        {
+            string csvFile = Path.GetTempFileName();
+            File.WriteAllText(csvFile, "Mixed\n100\nHello"); // Int then String
+
+            try
+            {
+                var schema = CsvReader.InferSchema(csvFile);
+                Assert.Equal(typeof(string), schema.GetColumnType("Mixed"));
+            }
+            finally
+            {
+                File.Delete(csvFile);
+            }
+        }
     }
 }
