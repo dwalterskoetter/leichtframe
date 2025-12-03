@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace LeichtFrame.Core;
+﻿namespace LeichtFrame.Core;
 
 /// The non-generic base class for all columns. 
 /// Allows storing columns of different types in a single collection.
