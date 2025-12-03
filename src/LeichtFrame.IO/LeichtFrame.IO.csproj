@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Apache.Arrow" Version="22.1.0" />
     <PackageReference Include="Parquet.Net" Version="5.4.0" />
   </ItemGroup>
 
