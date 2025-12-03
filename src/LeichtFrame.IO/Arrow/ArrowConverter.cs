@@ -1,4 +1,5 @@
 using Apache.Arrow; // NuGet Namespace
+using Apache.Arrow.Types;
 using LeichtFrame.Core;
 
 namespace LeichtFrame.IO
@@ -30,6 +31,108 @@ namespace LeichtFrame.IO
             }
 
             return new DataFrame(columns);
+        }
+
+        /// <summary>
+        /// Converts a LeichtFrame DataFrame into an Apache Arrow RecordBatch.
+        /// </summary>
+        public static RecordBatch ToRecordBatch(DataFrame df)
+        {
+            if (df == null) throw new ArgumentNullException(nameof(df));
+
+            // 1. Build Arrow Schema
+            var builder = new Schema.Builder();
+            foreach (var col in df.Columns)
+            {
+                builder.Field(f => f.Name(col.Name).DataType(GetArrowType(col.DataType)).Nullable(col.IsNullable));
+            }
+            var arrowSchema = builder.Build();
+
+            // 2. Build Arrow Arrays
+            var arrowArrays = new List<IArrowArray>(df.ColumnCount);
+            foreach (var col in df.Columns)
+            {
+                arrowArrays.Add(BuildArrowArray(col));
+            }
+
+            // 3. Create Batch
+            return new RecordBatch(arrowSchema, arrowArrays, df.RowCount);
+        }
+
+        private static IArrowType GetArrowType(Type type)
+        {
+            if (type == typeof(int)) return Int32Type.Default;
+            if (type == typeof(double)) return DoubleType.Default;
+            if (type == typeof(bool)) return BooleanType.Default;
+            if (type == typeof(string)) return StringType.Default;
+            if (type == typeof(DateTime)) return TimestampType.Default;
+
+            throw new NotSupportedException($"Type '{type.Name}' cannot be mapped to Arrow.");
+        }
+
+        private static IArrowArray BuildArrowArray(IColumn col)
+        {
+            if (col is IntColumn ic)
+            {
+                var builder = new Int32Array.Builder();
+                for (int i = 0; i < ic.Length; i++)
+                {
+                    if (ic.IsNull(i)) builder.AppendNull();
+                    else builder.Append(ic.Get(i));
+                }
+                return builder.Build();
+            }
+
+            if (col is DoubleColumn dc)
+            {
+                var builder = new DoubleArray.Builder();
+                for (int i = 0; i < dc.Length; i++)
+                {
+                    if (dc.IsNull(i)) builder.AppendNull();
+                    else builder.Append(dc.Get(i));
+                }
+                return builder.Build();
+            }
+
+            if (col is StringColumn sc)
+            {
+                var builder = new StringArray.Builder();
+                for (int i = 0; i < sc.Length; i++)
+                {
+                    // StringColumn handles nulls internally in Get() usually, but checking IsNull is safer/consistent
+                    if (sc.IsNull(i)) builder.AppendNull();
+                    else builder.Append(sc.Get(i));
+                }
+                return builder.Build();
+            }
+
+            if (col is BoolColumn bc)
+            {
+                var builder = new BooleanArray.Builder();
+                for (int i = 0; i < bc.Length; i++)
+                {
+                    if (bc.IsNull(i)) builder.AppendNull();
+                    else builder.Append(bc.Get(i));
+                }
+                return builder.Build();
+            }
+
+            if (col is DateTimeColumn dtc)
+            {
+                var builder = new TimestampArray.Builder();
+                for (int i = 0; i < dtc.Length; i++)
+                {
+                    if (dtc.IsNull(i)) builder.AppendNull();
+                    else
+                    {
+                        // Arrow prefers DateTimeOffset usually, but creates TimestampArray from it.
+                        builder.Append(new DateTimeOffset(dtc.Get(i)));
+                    }
+                }
+                return builder.Build();
+            }
+
+            throw new NotSupportedException($"Column type '{col.GetType().Name}' is not supported for Arrow export.");
         }
 
         private static IColumn ConvertArray(string name, IArrowArray array, int length)
