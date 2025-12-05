@@ -73,26 +73,32 @@ Read CSV → Filter → Aggregate → Export to Parquet.
 ```csharp
 using System;
 using System.IO;
-using LeichtFrame.Core.DataFrame;
-using LeichtFrame.IO.Csv;
-using LeichtFrame.IO.Parquet;
+using LeichtFrame.Core;
+using LeichtFrame.IO;
 
 class Example
 {
     static void Main()
     {
-        var schema = new DataFrameSchema(
+        // 1. For Scripts & Exploration: Auto-Detect Schema (Slower, but easy)
+        // var df = CsvReader.Read("data.csv");
+
+        // 2. For High-Performance Production Apps: Define Schema
+        // (Prevents double-scanning the file and ensures type safety)
+        var schema = new DataFrameSchema(new[] {
             new ColumnDefinition("Department", typeof(string)),
             new ColumnDefinition("Sales", typeof(double)),
             new ColumnDefinition("IsActive", typeof(bool))
-        );
+        });
 
         using var stream = File.OpenRead("data.csv");
-        var df = DataFrameCsvExtensions.ReadCsv(stream, schema);
 
-        var activeSales = df.Where(row => row.GetBool("IsActive"));
+        var df = CsvReader.Read(stream, schema);
 
-        var totalVolume = activeSales.Aggregation().Sum("Sales");
+        var activeSales = df.Where(row => row.Get<bool>("IsActive"));
+
+        var totalVolume = activeSales.Sum("Sales");
+
         Console.WriteLine($"Total Sales Volume: {totalVolume}");
 
         activeSales.WriteParquet("report.parquet");
@@ -122,7 +128,7 @@ class Example
 
 **Performance**
 
-- SIMD optimizations
+- SIMD optimizations (Phase 2)
 - Multi‑threaded Aggregations (Phase 2)
 
 **SQL**
