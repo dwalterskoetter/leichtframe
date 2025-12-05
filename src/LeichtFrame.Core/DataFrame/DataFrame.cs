@@ -209,46 +209,30 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Creates a DataFrame from a collection of objects using Reflection.
-        /// Public properties of T become columns.
+        /// Creates a DataFrame from a collection of objects (POCOs) using Reflection.
+        /// The schema is automatically generated from the public properties of <typeparamref name="T"/>.
         /// </summary>
+        /// <typeparam name="T">The type of the objects, determining the schema.</typeparam>
+        /// <param name="objects">The collection of objects to load.</param>
+        /// <returns>A populated DataFrame containing the data from the objects.</returns>
         public static DataFrame FromObjects<T>(IEnumerable<T> objects)
         {
             if (objects == null) throw new ArgumentNullException(nameof(objects));
 
-            // 1. Analyze Type T to build Schema
-            var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-            var colDefs = new List<ColumnDefinition>();
-            var propMap = new Dictionary<string, PropertyInfo>();
+            // 1. Get Schema via centralized logic
+            var schema = DataFrameSchema.FromType<T>();
 
-            foreach (var prop in properties)
-            {
-                Type type = prop.PropertyType;
-                bool isNullable = !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
-
-                // Unbox Nullable<T> to T (e.g. int? -> int) for the column type
-                Type coreType = Nullable.GetUnderlyingType(type) ?? type;
-
-                // Simple type check: We only support our core types for now
-                if (coreType != typeof(int) && coreType != typeof(double) &&
-                    coreType != typeof(string) && coreType != typeof(bool) &&
-                    coreType != typeof(DateTime))
-                {
-                    continue; // Skip unsupported complex types (e.g. nested classes)
-                }
-
-                colDefs.Add(new ColumnDefinition(prop.Name, coreType, isNullable));
-                propMap[prop.Name] = prop;
-            }
-
-            if (colDefs.Count == 0)
-                throw new ArgumentException($"Type '{typeof(T).Name}' has no supported public properties.");
-
-            // 2. Create DataFrame container
-            // We verify collection size if possible to pre-allocate
+            // 2. Prepare for data population
             int estimatedCount = objects is ICollection<T> coll ? coll.Count : 16;
-            var schema = new DataFrameSchema(colDefs);
             var df = DataFrame.Create(schema, estimatedCount);
+
+            // Cache PropertyInfos for speed
+            var type = typeof(T);
+            var propMap = new Dictionary<string, PropertyInfo>();
+            foreach (var col in df.Columns)
+            {
+                propMap[col.Name] = type.GetProperty(col.Name)!;
+            }
 
             // 3. Populate Data
             foreach (var item in objects)

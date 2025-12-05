@@ -104,5 +104,36 @@ namespace LeichtFrame.IO.Tests
                 File.Delete(csvFile);
             }
         }
+
+        private class ProductCsv
+        {
+            public int Id { get; set; }
+            public string Name { get; set; } = "";
+            public double Price { get; set; }
+        }
+
+        [Fact]
+        public void Read_Generic_Map_To_POCO_Schema_Correctly()
+        {
+            // Arrange
+            var csv = "Id,Name,Price\n10,Laptop,999.99\n20,Mouse,19.50";
+            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv));
+
+            // Act: The "Gold Standard" Call
+            var df = CsvReader.Read<ProductCsv>(stream);
+
+            // Assert
+            Assert.Equal(2, df.RowCount);
+
+            // Verify Schema was inferred from POCO
+            Assert.Equal(typeof(int), df.GetColumnType("Id"));
+            Assert.Equal(typeof(string), df.GetColumnType("Name"));
+            Assert.Equal(typeof(double), df.GetColumnType("Price"));
+
+            // Verify Data
+            Assert.Equal(10, df["Id"].Get<int>(0));
+            Assert.Equal("Laptop", df["Name"].Get<string>(0));
+            Assert.Equal(999.99, df["Price"].Get<double>(0));
+        }
     }
 }
