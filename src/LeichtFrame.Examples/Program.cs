@@ -34,7 +34,7 @@ using var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(rawCsvData));
 // Strict typing is the key to performance.
 var schema = new DataFrameSchema(new[] {
     new ColumnDefinition("TransactionId", typeof(int)),
-    new ColumnDefinition("Department", typeof(string)),
+    new ColumnDefinition("Department", typeof(string), IsNullable: true),
     new ColumnDefinition("SalesAmount", typeof(double)),
     new ColumnDefinition("IsRefund", typeof(bool))
 });
@@ -43,7 +43,7 @@ var schema = new DataFrameSchema(new[] {
 // 3. READ CSV (Streaming)
 // ---------------------------------------------------------
 Console.WriteLine("[2] Reading CSV into DataFrame...");
-var df = DataFrameCsvExtensions.ReadCsv(memoryStream, schema);
+var df = CsvReader.Read(memoryStream, schema);
 
 Console.WriteLine($"    Loaded {df.RowCount} rows.");
 Console.WriteLine("    Raw Data Preview:");

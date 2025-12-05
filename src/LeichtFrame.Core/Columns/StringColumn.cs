@@ -132,6 +132,33 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
+        // --- Memory Estimation ---
+
+        public long EstimateMemoryUsage()
+        {
+            long total = 0;
+
+            total += _data.Length * IntPtr.Size;
+
+            if (_nulls != null) total += _data.Length / 8;
+
+            for (int i = 0; i < _length; i++)
+            {
+                var s = _data[i];
+                if (s != null)
+                {
+                    total += 24 + (s.Length * 2);
+                }
+            }
+
+            if (_internPool != null)
+            {
+                total += _internPool.Count * 64;
+            }
+
+            return total;
+        }
+
         // --- Memory Management ---
 
         public override void EnsureCapacity(int minCapacity)
