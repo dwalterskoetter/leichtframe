@@ -1,0 +1,52 @@
+name: LeichtFrame CD (Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.1.0)"
+        required: true
+        default: "0.1.0-alpha"
+
+jobs:
+  publish:
+    name: Publish to NuGet
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Intelligent Version Logic: Manual Input OR Git Tag
+      - name: Determine Version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+            echo "Mode: Manual Release ${{ github.event.inputs.version }}"
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+            echo "Mode: Tag Triggered Release"
+          fi
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build & Test
+        run: |
+          dotnet build --no-restore -c Release -p:Version=${{ env.VERSION }}
+          dotnet test --no-build -c Release
+
+      - name: Pack
+        run: dotnet pack --no-build -c Release -o nupkgs -p:Version=${{ env.VERSION }}
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push nupkgs/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
