@@ -67,4 +67,37 @@ public class SchemaTests
         Assert.Equal(typeof(bool), loadedSchema.Columns[1].DataType);
         Assert.True(loadedSchema.Columns[1].IsNullable);
     }
+
+    private class TestPoco
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public double Score { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    [Fact]
+    public void FromType_Generates_Correct_Schema_From_POCO()
+    {
+        // Act
+        var schema = DataFrameSchema.FromType<TestPoco>();
+
+        // Assert
+        Assert.Equal(4, schema.Columns.Count);
+
+        // Check Types & Names
+        Assert.Equal(typeof(int), schema.GetColumnType("Id"));
+        Assert.Equal(typeof(string), schema.GetColumnType("Name"));
+        Assert.Equal(typeof(double), schema.GetColumnType("Score"));
+        Assert.Equal(typeof(bool), schema.GetColumnType("IsActive"));
+
+        // Check Nullability
+        // Name is string? -> Nullable
+        var nameCol = schema.Columns.First(c => c.Name == "Name");
+        Assert.True(nameCol.IsNullable);
+
+        // Id is int -> Not Nullable
+        var idCol = schema.Columns.First(c => c.Name == "Id");
+        Assert.False(idCol.IsNullable);
+    }
 }

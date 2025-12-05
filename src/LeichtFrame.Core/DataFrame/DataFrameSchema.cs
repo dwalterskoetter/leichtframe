@@ -96,4 +96,36 @@ public class DataFrameSchema
         public string DataTypeName { get; set; } = string.Empty;
         public bool IsNullable { get; set; }
     }
+
+    /// <summary>
+    /// Creates a schema definition automatically from a C# class (POCO).
+    /// </summary>
+    public static DataFrameSchema FromType<T>()
+    {
+        var properties = typeof(T).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        var colDefs = new List<ColumnDefinition>();
+
+        foreach (var prop in properties)
+        {
+            Type type = prop.PropertyType;
+            // Unbox Nullable<T> -> T
+            Type coreType = Nullable.GetUnderlyingType(type) ?? type;
+            bool isNullable = !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
+
+            // Supported Types Check
+            if (coreType != typeof(int) && coreType != typeof(double) &&
+                coreType != typeof(string) && coreType != typeof(bool) &&
+                coreType != typeof(DateTime))
+            {
+                continue; // Skip unsupported types
+            }
+
+            colDefs.Add(new ColumnDefinition(prop.Name, coreType, isNullable));
+        }
+
+        if (colDefs.Count == 0)
+            throw new ArgumentException($"Type '{typeof(T).Name}' has no supported public properties.");
+
+        return new DataFrameSchema(colDefs);
+    }
 }

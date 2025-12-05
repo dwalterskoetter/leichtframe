@@ -272,5 +272,23 @@ namespace LeichtFrame.IO
             // 2. Mit dem geratenen Schema lesen
             return Read(path, schema, options);
         }
+
+        /// <summary>
+        /// Reads a CSV file using a POCO class to define the schema strongly typed.
+        /// </summary>
+        public static DataFrame Read<T>(string path, CsvReadOptions? options = null)
+        {
+            var schema = DataFrameSchema.FromType<T>();
+            return Read(path, schema, options);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream using a POCO class to define the schema strongly typed.
+        /// </summary>
+        public static DataFrame Read<T>(Stream stream, CsvReadOptions? options = null)
+        {
+            var schema = DataFrameSchema.FromType<T>();
+            return Read(stream, schema, options);
+        }
     }
 }

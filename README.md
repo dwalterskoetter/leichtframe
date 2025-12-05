@@ -68,39 +68,38 @@ dotnet add package LeichtFrame.IO
 
 ## 📘 Quickstart Example (End‑to‑End)
 
+LeichtFrame allows you to define your schema using standard C# classes (POCOs) — similar to `CsvHelper` or `EF Core`.
+
 Read CSV → Filter → Aggregate → Export to Parquet.
 
 ```csharp
 using System;
-using System.IO;
 using LeichtFrame.Core;
 using LeichtFrame.IO;
+
+// 1. Define your data structure
+public class SalesRecord
+{
+    public string Department { get; set; }
+    public double Sales { get; set; }
+    public bool IsActive { get; set; }
+}
 
 class Example
 {
     static void Main()
     {
-        // 1. For Scripts & Exploration: Auto-Detect Schema (Slower, but easy)
-        // var df = CsvReader.Read("data.csv");
+        // 2. Read CSV (Schema is inferred from the class 🚀)
+        var df = CsvReader.Read<SalesRecord>("data.csv");
 
-        // 2. For High-Performance Production Apps: Define Schema
-        // (Prevents double-scanning the file and ensures type safety)
-        var schema = new DataFrameSchema(new[] {
-            new ColumnDefinition("Department", typeof(string)),
-            new ColumnDefinition("Sales", typeof(double)),
-            new ColumnDefinition("IsActive", typeof(bool))
-        });
-
-        using var stream = File.OpenRead("data.csv");
-
-        var df = CsvReader.Read(stream, schema);
-
+        // 3. High-Performance Filtering (Zero-Allocation view)
         var activeSales = df.Where(row => row.Get<bool>("IsActive"));
 
+        // 4. Aggregation
         var totalVolume = activeSales.Sum("Sales");
-
         Console.WriteLine($"Total Sales Volume: {totalVolume}");
 
+        // 5. Export to Parquet (Big Data ready)
         activeSales.WriteParquet("report.parquet");
     }
 }
