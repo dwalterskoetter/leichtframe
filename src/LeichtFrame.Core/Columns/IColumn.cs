@@ -22,6 +22,7 @@ namespace LeichtFrame.Core
         object? GetValue(int index);
         bool IsNull(int index);
         void SetNull(int index);
+        void AppendObject(object? value);
 
         /// <summary>
         /// Creates a deep copy of the column containing only the rows at the specified indices.
@@ -34,6 +35,7 @@ namespace LeichtFrame.Core
     {
         new T GetValue(int index);
         void SetValue(int index, T value);
+        void Append(T value);
         ReadOnlyMemory<T> Slice(int start, int length);
 
         // Useful for zero-copy access later
