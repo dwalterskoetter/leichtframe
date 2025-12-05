@@ -9,11 +9,6 @@ Console.WriteLine("=========================================================");
 // ---------------------------------------------------------
 // 1. SETUP: Simulate Messy Input Data (CSV)
 // ---------------------------------------------------------
-// In a real app, this would be a file on disk.
-// We have:
-// - Missing IDs (null/0)
-// - Empty Department names (messy data)
-// - Valid numerical data
 string rawCsvData =
 @"TransactionId,Department,SalesAmount,IsRefund
 1,Sales,50.00,false
@@ -29,36 +24,25 @@ Console.WriteLine("\n[1] Generating simulated CSV data stream...");
 using var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(rawCsvData));
 
 // ---------------------------------------------------------
-// 2. DEFINE SCHEMA
+// 2. DEFINE SCHEMA (The "Gold Standard" Way via POCO)
 // ---------------------------------------------------------
-// Strict typing is the key to performance.
-var schema = new DataFrameSchema(new[] {
-    new ColumnDefinition("TransactionId", typeof(int)),
-    new ColumnDefinition("Department", typeof(string), IsNullable: true),
-    new ColumnDefinition("SalesAmount", typeof(double)),
-    new ColumnDefinition("IsRefund", typeof(bool))
-});
+// Instead of manually building ColumnDefinitions, we simply use a class.
+// This ensures type safety and clean code.
+// ---------------------------------------------------------
+var df = CsvReader.Read<TransactionData>(memoryStream);
 
-// ---------------------------------------------------------
-// 3. READ CSV (Streaming)
-// ---------------------------------------------------------
-Console.WriteLine("[2] Reading CSV into DataFrame...");
-var df = CsvReader.Read(memoryStream, schema);
-
-Console.WriteLine($"    Loaded {df.RowCount} rows.");
+Console.WriteLine($"[2] Read CSV into DataFrame. Loaded {df.RowCount} rows.");
 Console.WriteLine("    Raw Data Preview:");
 Console.WriteLine(df.Inspect());
 
 // ---------------------------------------------------------
-// 4. CLEANING (Filter)
+// 3. CLEANING (Filter)
 // ---------------------------------------------------------
-// Logic: We want to remove rows where 'Department' is empty/null 
-// OR where it is a Refund.
 Console.WriteLine("[3] Cleaning Data (Removing missing Departments & Refunds)...");
 
 var cleanedDf = df.Where(row =>
 {
-    // High-performance typed access via RowView
+    // High-performance access via generic Get<T>
     string dept = row.Get<string>("Department");
     bool isRefund = row.Get<bool>("IsRefund");
 
@@ -70,21 +54,18 @@ Console.WriteLine($"    Cleaned Data: {cleanedDf.RowCount} rows remaining.");
 Console.WriteLine(cleanedDf.Inspect());
 
 // ---------------------------------------------------------
-// 5. AGGREGATION (GroupBy & Sum)
+// 4. AGGREGATION (GroupBy & Sum)
 // ---------------------------------------------------------
-// Logic: Calculate total sales per Department
 Console.WriteLine("[4] Aggregating: Total Sales by Department...");
 
-// GroupBy creates a hash-map of indices, then Sum aggregates the specific column
 var reportDf = cleanedDf.GroupBy("Department").Sum("SalesAmount");
 
 Console.WriteLine("    Report Result:");
 Console.WriteLine(reportDf.Inspect());
 
 // ---------------------------------------------------------
-// 6. EXPORT (Parquet)
+// 5. EXPORT (Parquet)
 // ---------------------------------------------------------
-// Parquet is columnar and compressed, perfect for Big Data systems.
 string outputPath = "sales_report.parquet";
 Console.WriteLine($"[5] Exporting Report to Parquet: '{outputPath}'...");
 
@@ -93,3 +74,17 @@ reportDf.WriteParquet(outputPath);
 
 Console.WriteLine("✅ Done! Pipeline executed successfully.");
 Console.WriteLine("=========================================================");
+
+// ---------------------------------------------------------
+// POCO Definition
+// ---------------------------------------------------------
+public class TransactionData
+{
+    public int TransactionId { get; set; }
+
+    // Nullable because input data might have missing values (e.g., "3,,0.00")
+    public string? Department { get; set; }
+
+    public double SalesAmount { get; set; }
+    public bool IsRefund { get; set; }
+}
