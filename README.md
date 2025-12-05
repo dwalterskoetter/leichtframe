@@ -2,7 +2,7 @@
 
 ![Build Status](https://github.com/dwalterskoetter/leichtFrame/actions/workflows/ci.yml/badge.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![NuGet](https://img.shields.io/badge/NuGet-0.1.0--alpha-blue.svg)](https://www.nuget.org/packages/LeichtFrame.Core/)
+[![NuGet](https://img.shields.io/nuget/v/LeichtFrame.Core.svg)](https://www.nuget.org/packages/LeichtFrame.Core/)
 
 **LeichtFrame** is a high‑performance, zero‑allocation DataFrame engine for **.NET 8+**, designed for **backend and SaaS workloads**.
 
