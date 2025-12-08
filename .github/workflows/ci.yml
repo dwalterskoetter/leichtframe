@@ -32,6 +32,14 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release --verbosity normal
 
+      - name: Restore Local Tools
+        run: dotnet tool restore
+
+      - name: Verify Documentation Generation
+        run: |
+          chmod +x scripts/generate_docs.sh
+          ./scripts/generate_docs.sh
+
       # We pack to ensure metadata is valid and code is packable.
       # This is a "Dry Run" - we do not publish this artifact to NuGet.org.
       - name: Pack (Dry Run)
