@@ -27,10 +27,10 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Ensures the column has space for at least the specified number of elements.
-        /// If the capacity is increased, the underlying buffer is swapped.
+        /// If the capacity is increased, the underlying buffer is swapped.           
         /// <para>
-        /// <strong>SAFETY WARNING:</strong> Because this library uses array pooling, 
-        /// calling this method may return the old buffer to the pool.
+        /// **SAFETY WARNING:** Because this library uses array pooling, 
+        /// calling this method may return the old buffer to the pool.  
         /// Existing Spans pointing to the old buffer will become invalid.
         /// </para>
         /// </summary>

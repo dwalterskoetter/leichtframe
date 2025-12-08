@@ -47,7 +47,9 @@ namespace LeichtFrame.Core
         /// <inheritdoc />
         public bool IsNullable => _source.IsNullable;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the underlying memory storage of the slice.
+        /// </summary>
         public ReadOnlyMemory<T> Values => _source.Slice(_offset, _length);
 
         /// <inheritdoc />
@@ -55,7 +57,7 @@ namespace LeichtFrame.Core
 
         // --- Data Access ---
 
-        /// <inheritdoc />
+        /// <inheritdoc cref="IColumn{T}.GetValue(int)" />
         public T Get(int index)
         {
             CheckBounds(index);
@@ -63,6 +65,7 @@ namespace LeichtFrame.Core
         }
 
         // Interface Implementation
+        /// <exclude />
         T IColumn<T>.GetValue(int index) => Get(index);
 
         /// <inheritdoc />
