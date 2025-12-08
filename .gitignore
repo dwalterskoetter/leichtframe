@@ -133,6 +133,13 @@ $tf/
 # Guidance Automation Toolkit
 *.gpState
 
+# --- Documentation Generation ---
+# Ignore generated API docs (they are rebuilt by CI/Script)
+website/docs/api/
+
+# Ignore copied guides (they exist in /docs originally)
+website/docs/guides/
+
 # ReSharper is a .NET coding add-in
 _ReSharper*/
 *.[Rr]e[Ss]harper
