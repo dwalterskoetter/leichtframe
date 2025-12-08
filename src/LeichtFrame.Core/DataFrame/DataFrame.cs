@@ -3,6 +3,10 @@ using System.Text;
 
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Represents a high-performance, column-oriented in-memory data table.
+    /// Optimized for low memory allocation and fast analytical queries using SIMD and <see cref="Span{T}"/>.
+    /// </summary>
     public class DataFrame : IDisposable
     {
         /// <summary>
@@ -172,7 +176,7 @@ namespace LeichtFrame.Core
             Schema = new DataFrameSchema(definitions);
         }
 
-        // <summary>
+        /// <summary>
         /// Gets the column at the specified index.
         /// </summary>
         public IColumn this[int index] => _columns[index];
@@ -257,6 +261,11 @@ namespace LeichtFrame.Core
             GC.SuppressFinalize(this);
         }
 
+
+        /// <summary>
+        /// Releases unmanaged and - optionally - managed resources.
+        /// </summary>
+        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (_isDisposed) return;

@@ -2,6 +2,10 @@ using System.Buffers;
 
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// A column for storing <see cref="string"/> values.
+    /// Supports optional string interning (deduplication) to significantly reduce memory usage for categorical data.
+    /// </summary>
     public class StringColumn : Column<string?>, IDisposable
     {
         private string?[] _data;
@@ -12,6 +16,17 @@ namespace LeichtFrame.Core
         private readonly bool _useInterning;
         private readonly Dictionary<string, string>? _internPool;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StringColumn"/> class.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <param name="capacity">The initial capacity (number of rows).</param>
+        /// <param name="isNullable">Whether the column supports null values.</param>
+        /// <param name="useInterning">
+        /// If set to <c>true</c>, enables string deduplication. 
+        /// Identical strings will share the same reference in memory. 
+        /// Recommended for columns with low cardinality (e.g., "Category", "Country").
+        /// </param>
         public StringColumn(string name, int capacity = 16, bool isNullable = false, bool useInterning = false)
             : base(name, isNullable)
         {
@@ -30,12 +45,15 @@ namespace LeichtFrame.Core
             }
         }
 
+        /// <inheritdoc />
         public override int Length => _length;
 
+        /// <inheritdoc />
         public override ReadOnlyMemory<string?> Values => new ReadOnlyMemory<string?>(_data, 0, _length);
 
         // --- Core Access ---
 
+        /// <inheritdoc />
         public override string? Get(int index)
         {
             CheckBounds(index);
@@ -43,6 +61,7 @@ namespace LeichtFrame.Core
             return _data[index];
         }
 
+        /// <inheritdoc />
         public override void SetValue(int index, string? value)
         {
             CheckBounds(index);
@@ -73,6 +92,7 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
+        /// <inheritdoc />
         public override void Append(string? value)
         {
             EnsureCapacity(_length + 1);
@@ -111,12 +131,14 @@ namespace LeichtFrame.Core
 
         // --- Null Handling ---
 
+        /// <inheritdoc />
         public override bool IsNull(int index)
         {
             CheckBounds(index);
             return _nulls != null && _nulls.IsNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNull(int index)
         {
             CheckBounds(index);
@@ -126,6 +148,7 @@ namespace LeichtFrame.Core
             _nulls.SetNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNotNull(int index)
         {
             CheckBounds(index);
@@ -134,6 +157,11 @@ namespace LeichtFrame.Core
 
         // --- Memory Estimation ---
 
+        /// <summary>
+        /// Estimates the total memory usage of this column in bytes.
+        /// Includes the internal arrays, the null bitmap, and the approximate size of the string objects on the heap.
+        /// </summary>
+        /// <returns>The estimated memory size in bytes.</returns>
         public long EstimateMemoryUsage()
         {
             long total = 0;
@@ -161,6 +189,7 @@ namespace LeichtFrame.Core
 
         // --- Memory Management ---
 
+        /// <inheritdoc />
         public override void EnsureCapacity(int minCapacity)
         {
             if (_data.Length >= minCapacity) return;
@@ -183,6 +212,7 @@ namespace LeichtFrame.Core
             if ((uint)index >= (uint)_length) throw new IndexOutOfRangeException();
         }
 
+        /// <inheritdoc />
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
             var newCol = new StringColumn(Name, indices.Count, IsNullable);
@@ -202,6 +232,7 @@ namespace LeichtFrame.Core
             return newCol;
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_data != null)

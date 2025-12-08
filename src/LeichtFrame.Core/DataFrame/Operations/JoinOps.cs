@@ -4,11 +4,21 @@ using System.Linq;
 
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Provides extension methods for joining multiple <see cref="DataFrame"/> objects.
+    /// </summary>
     public static class DataFrameJoinExtensions
     {
         /// <summary>
         /// Joins two DataFrames based on a common key column using a Hash Join algorithm.
         /// </summary>
+        /// <param name="left">The left DataFrame (the source of the method call).</param>
+        /// <param name="right">The right DataFrame to join against.</param>
+        /// <param name="on">The name of the column to use as the join key. Must exist in both DataFrames.</param>
+        /// <param name="joinType">The type of join to perform (e.g., Inner). Currently, only <see cref="JoinType.Inner"/> is supported.</param>
+        /// <returns>A new <see cref="DataFrame"/> containing columns from both sources, matched by the key.</returns>
+        /// <exception cref="NotImplementedException">Thrown if <paramref name="joinType"/> is not Inner.</exception>
+        /// <exception cref="NotSupportedException">Thrown if there are column name collisions between the two DataFrames.</exception>
         public static DataFrame Join(this DataFrame left, DataFrame right, string on, JoinType joinType = JoinType.Inner)
         {
             if (joinType != JoinType.Inner)

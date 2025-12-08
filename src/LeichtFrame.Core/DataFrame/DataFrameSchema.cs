@@ -2,17 +2,34 @@ using System.Text.Json;
 
 namespace LeichtFrame.Core;
 
-/// Defines the metadata for a single column.
+/// <summary>
+/// Defines the metadata for a single column within a DataFrame schema.
+/// </summary>
+/// <param name="Name">The unique name of the column.</param>
+/// <param name="DataType">The CLR type of the data stored in the column.</param>
+/// <param name="IsNullable">Indicates if the column supports null values.</param>
 public record ColumnDefinition(string Name, Type DataType, bool IsNullable = false);
 
-/// Represents the structure of a DataFrame (collection of column definitions).
+/// <summary>
+/// Represents the structure of a DataFrame, consisting of a collection of column definitions.
+/// Provides lookup methods for column indices and types.
+/// </summary>
 public class DataFrameSchema
 {
     private readonly List<ColumnDefinition> _columns;
     private readonly Dictionary<string, int> _nameMap;
 
+    /// <summary>
+    /// Gets the list of column definitions in this schema.
+    /// </summary>
     public IReadOnlyList<ColumnDefinition> Columns => _columns;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DataFrameSchema"/> class.
+    /// </summary>
+    /// <param name="columns">The collection of column definitions.</param>
+    /// <exception cref="ArgumentNullException">Thrown if columns is null.</exception>
+    /// <exception cref="ArgumentException">Thrown if duplicate column names are detected.</exception>
     public DataFrameSchema(IEnumerable<ColumnDefinition> columns)
     {
         _columns = columns?.ToList() ?? throw new ArgumentNullException(nameof(columns));
@@ -29,10 +46,19 @@ public class DataFrameSchema
         }
     }
 
-    /// Checks if a column with the given name exists.
+    /// <summary>
+    /// Checks if a column with the given name exists in the schema.
+    /// </summary>
+    /// <param name="name">The name of the column to check.</param>
+    /// <returns><c>true</c> if the column exists; otherwise, <c>false</c>.</returns>
     public bool HasColumn(string name) => _nameMap.ContainsKey(name);
 
-    /// Gets the index of the column. Throws if not found.
+    /// <summary>
+    /// Gets the zero-based index of the column with the specified name.
+    /// </summary>
+    /// <param name="name">The name of the column.</param>
+    /// <returns>The index of the column.</returns>
+    /// <exception cref="ArgumentException">Thrown if the column does not exist.</exception>
     public int GetColumnIndex(string name)
     {
         if (_nameMap.TryGetValue(name, out int index))
@@ -42,7 +68,12 @@ public class DataFrameSchema
     }
 
     // --- JSON Serialization Logic ---
-    /// Serializes the schema to a JSON string.
+
+    /// <summary>
+    /// Serializes the schema to a JSON string representation.
+    /// Useful for persisting metadata or transferring schemas between processes.
+    /// </summary>
+    /// <returns>A JSON string defining the schema.</returns>
     public string ToJson()
     {
         // Convert to DTO because System.Type implies security risks and complexity in raw JSON. We store the Type Name as a string.
@@ -59,7 +90,12 @@ public class DataFrameSchema
         return JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    /// Creates a Schema from a JSON string.
+    /// <summary>
+    /// Creates a <see cref="DataFrameSchema"/> from a JSON string.
+    /// </summary>
+    /// <param name="json">The JSON string containing the schema definition.</param>
+    /// <returns>The deserialized schema.</returns>
+    /// <exception cref="ArgumentException">Thrown if the JSON is invalid.</exception>
     public static DataFrameSchema FromJson(string json)
     {
         var dto = JsonSerializer.Deserialize<SchemaDto>(json);
@@ -76,8 +112,11 @@ public class DataFrameSchema
     }
 
     /// <summary>
-    /// Helper to get the type of a column by name.
+    /// Helper to get the <see cref="Type"/> of a column by name.
     /// </summary>
+    /// <param name="name">The column name.</param>
+    /// <returns>The data type of the column.</returns>
+    /// <exception cref="ArgumentException">Thrown if the column does not exist.</exception>
     public Type GetColumnType(string name)
     {
         int index = GetColumnIndex(name); // Wirft Fehler, wenn nicht gefunden
@@ -98,8 +137,12 @@ public class DataFrameSchema
     }
 
     /// <summary>
-    /// Creates a schema definition automatically from a C# class (POCO).
+    /// Creates a schema definition automatically from a C# class (POCO) using Reflection.
+    /// Only supported primitive types (int, double, bool, string, DateTime) are mapped.
     /// </summary>
+    /// <typeparam name="T">The POCO type to analyze.</typeparam>
+    /// <returns>A derived <see cref="DataFrameSchema"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown if the type has no supported public properties.</exception>
     public static DataFrameSchema FromType<T>()
     {
         var properties = typeof(T).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);

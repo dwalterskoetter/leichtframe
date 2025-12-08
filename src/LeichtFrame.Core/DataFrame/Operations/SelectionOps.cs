@@ -1,5 +1,8 @@
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Provides extension methods for selecting columns and slicing rows from a <see cref="DataFrame"/>.
+    /// </summary>
     public static class DataFrameSelectionExtensions
     {
         /// <summary>
@@ -30,6 +33,10 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Returns a zero-copy view of the DataFrame restricted to the specified row range.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="start">The zero-based starting row index.</param>
+        /// <param name="length">The number of rows to include in the slice.</param>
+        /// <returns>A new DataFrame containing the subset of rows.</returns>
         public static DataFrame Slice(this DataFrame df, int start, int length)
         {
             if (start < 0) throw new ArgumentOutOfRangeException(nameof(start));
@@ -59,11 +66,23 @@ namespace LeichtFrame.Core
             return new DataFrame(newColumns);
         }
 
+        /// <summary>
+        /// Returns the first <paramref name="count"/> rows of the DataFrame.
+        /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="count">The number of rows to return from the beginning.</param>
+        /// <returns>A new DataFrame containing the first rows.</returns>
         public static DataFrame Head(this DataFrame df, int count)
         {
             return df.Slice(0, count);
         }
 
+        /// <summary>
+        /// Returns the last <paramref name="count"/> rows of the DataFrame.
+        /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="count">The number of rows to return from the end.</param>
+        /// <returns>A new DataFrame containing the last rows.</returns>
         public static DataFrame Tail(this DataFrame df, int count)
         {
             int start = Math.Max(0, df.RowCount - count);

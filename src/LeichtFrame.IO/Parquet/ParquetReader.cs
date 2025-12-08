@@ -3,23 +3,40 @@ using Parquet.Schema;
 
 namespace LeichtFrame.IO
 {
+    /// <summary>
+    /// Provides high-performance methods to read Apache Parquet files into a <see cref="DataFrame"/>.
+    /// Automatically maps Parquet schema types to LeichtFrame column types.
+    /// </summary>
     public static class ParquetReader
     {
         /// <summary>
-        /// Reads a Parquet file and converts it to a DataFrame.
+        /// Reads a Parquet file from the specified file path.
         /// </summary>
+        /// <param name="path">The full path to the Parquet file.</param>
+        /// <returns>A populated <see cref="DataFrame"/> containing the data.</returns>
         public static DataFrame Read(string path)
         {
             using var stream = File.OpenRead(path);
             return Read(stream);
         }
 
+        /// <summary>
+        /// Reads a Parquet file from a stream synchronously.
+        /// </summary>
+        /// <param name="stream">The input stream containing Parquet data.</param>
+        /// <returns>A populated <see cref="DataFrame"/>.</returns>
         public static DataFrame Read(Stream stream)
         {
             // Synchronous Wrapper for the Async method
             return ReadAsync(stream).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// Reads a Parquet file from a stream asynchronously.
+        /// Recommended for I/O-bound operations in Web APIs to avoid blocking threads.
+        /// </summary>
+        /// <param name="stream">The input stream containing Parquet data.</param>
+        /// <returns>A task that represents the asynchronous read operation, containing the resulting <see cref="DataFrame"/>.</returns>
         public static async Task<DataFrame> ReadAsync(Stream stream)
         {
             using var reader = await Parquet.ParquetReader.CreateAsync(stream);

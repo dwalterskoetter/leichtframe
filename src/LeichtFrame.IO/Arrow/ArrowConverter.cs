@@ -1,15 +1,27 @@
-using Apache.Arrow; // NuGet Namespace
+using Apache.Arrow;
 using Apache.Arrow.Types;
 using LeichtFrame.Core;
 
 namespace LeichtFrame.IO
 {
+    /// <summary>
+    /// Provides interoperability methods to convert between LeichtFrame <see cref="DataFrame"/> 
+    /// and Apache Arrow <see cref="RecordBatch"/>.
+    /// Enables integration with the broader data ecosystem (Spark, Python, etc.).
+    /// </summary>
     public static class ArrowConverter
     {
         /// <summary>
         /// Converts an Apache Arrow RecordBatch into a LeichtFrame DataFrame.
-        /// Performs a deep copy of the data (Phase 1 implementation).
+        /// <para>
+        /// <strong>Note:</strong> Currently performs a deep copy of the data (Phase 1 implementation).
+        /// Zero-copy integration is planned for future releases.
+        /// </para>
         /// </summary>
+        /// <param name="batch">The source Apache Arrow RecordBatch.</param>
+        /// <returns>A new <see cref="DataFrame"/> containing the data from the RecordBatch.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if the batch is null.</exception>
+        /// <exception cref="NotSupportedException">Thrown if the Arrow data type is not supported by LeichtFrame.</exception>
         public static DataFrame ToDataFrame(RecordBatch batch)
         {
             if (batch == null) throw new ArgumentNullException(nameof(batch));
@@ -36,6 +48,10 @@ namespace LeichtFrame.IO
         /// <summary>
         /// Converts a LeichtFrame DataFrame into an Apache Arrow RecordBatch.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <returns>A new <see cref="RecordBatch"/> containing the data.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if the DataFrame is null.</exception>
+        /// <exception cref="NotSupportedException">Thrown if a column type cannot be mapped to Arrow.</exception>
         public static RecordBatch ToRecordBatch(DataFrame df)
         {
             if (df == null) throw new ArgumentNullException(nameof(df));

@@ -2,12 +2,22 @@ using System.Buffers;
 
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// A high-performance column for storing <see cref="DateTime"/> values.
+    /// Uses pooled arrays for zero-allocation data management.
+    /// </summary>
     public class DateTimeColumn : Column<DateTime>, IDisposable
     {
         private DateTime[] _data;
         private NullBitmap? _nulls;
         private int _length;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DateTimeColumn"/> class.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <param name="capacity">The initial capacity (number of rows).</param>
+        /// <param name="isNullable">Whether the column supports null values.</param>
         public DateTimeColumn(string name, int capacity = 16, bool isNullable = false)
             : base(name, isNullable)
         {
@@ -20,18 +30,22 @@ namespace LeichtFrame.Core
             }
         }
 
+        /// <inheritdoc />
         public override int Length => _length;
 
+        /// <inheritdoc />
         public override ReadOnlyMemory<DateTime> Values => new ReadOnlyMemory<DateTime>(_data, 0, _length);
 
         // --- Core Access ---
 
+        /// <inheritdoc />
         public override DateTime Get(int index)
         {
             CheckBounds(index);
             return _data[index];
         }
 
+        /// <inheritdoc />
         public override void SetValue(int index, DateTime value)
         {
             CheckBounds(index);
@@ -39,6 +53,7 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
+        /// <inheritdoc />
         public override void Append(DateTime value)
         {
             EnsureCapacity(_length + 1);
@@ -47,7 +62,11 @@ namespace LeichtFrame.Core
             _length++;
         }
 
-        // Helper 
+        /// <summary>
+        /// Appends a nullable DateTime value.
+        /// </summary>
+        /// <param name="value">The value to append, or null.</param>
+        /// <exception cref="InvalidOperationException">Thrown if null is passed to a non-nullable column.</exception>
         public void Append(DateTime? value)
         {
             EnsureCapacity(_length + 1);
@@ -69,12 +88,14 @@ namespace LeichtFrame.Core
 
         // --- Null Handling ---
 
+        /// <inheritdoc />
         public override bool IsNull(int index)
         {
             CheckBounds(index);
             return _nulls != null && _nulls.IsNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNull(int index)
         {
             CheckBounds(index);
@@ -85,6 +106,7 @@ namespace LeichtFrame.Core
             _nulls.SetNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNotNull(int index)
         {
             CheckBounds(index);
@@ -93,6 +115,7 @@ namespace LeichtFrame.Core
 
         // --- Memory Management ---
 
+        /// <inheritdoc />
         public override void EnsureCapacity(int minCapacity)
         {
             if (_data.Length >= minCapacity) return;
@@ -114,6 +137,7 @@ namespace LeichtFrame.Core
                 throw new IndexOutOfRangeException($"Index {index} is out of range.");
         }
 
+        /// <inheritdoc />
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
             var newCol = new DateTimeColumn(Name, indices.Count, IsNullable);
@@ -133,6 +157,7 @@ namespace LeichtFrame.Core
             return newCol;
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_data != null)

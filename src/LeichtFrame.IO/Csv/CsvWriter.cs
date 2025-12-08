@@ -3,8 +3,19 @@ using LeichtFrame.Core;
 
 namespace LeichtFrame.IO
 {
+    /// <summary>
+    /// Provides methods for writing <see cref="DataFrame"/> content to CSV format.
+    /// Handles proper escaping (RFC 4180) and formatting based on configurable options.
+    /// </summary>
     public static class CsvWriter
     {
+        /// <summary>
+        /// Writes the DataFrame to a CSV file at the specified path.
+        /// Overwrites the file if it already exists.
+        /// </summary>
+        /// <param name="df">The DataFrame to write.</param>
+        /// <param name="path">The full file path.</param>
+        /// <param name="options">Optional formatting options (separator, date format, etc.).</param>
         public static void Write(DataFrame df, string path, CsvWriteOptions? options = null)
         {
             // File.Create overrides existing files
@@ -12,6 +23,12 @@ namespace LeichtFrame.IO
             Write(df, stream, options);
         }
 
+        /// <summary>
+        /// Writes the DataFrame to a stream in CSV format.
+        /// </summary>
+        /// <param name="df">The DataFrame to write.</param>
+        /// <param name="stream">The output stream (must be writable).</param>
+        /// <param name="options">Optional formatting options.</param>
         public static void Write(DataFrame df, Stream stream, CsvWriteOptions? options = null)
         {
             options ??= new CsvWriteOptions();
