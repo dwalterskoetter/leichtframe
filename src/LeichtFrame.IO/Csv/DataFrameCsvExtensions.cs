@@ -4,6 +4,9 @@ using LeichtFrame.Core;
 
 namespace LeichtFrame.IO
 {
+    /// <summary>
+    /// Provides extension methods for importing and exporting <see cref="DataFrame"/> objects via CSV.
+    /// </summary>
     public static class DataFrameCsvExtensions
     {
         // =========================================================
@@ -11,8 +14,11 @@ namespace LeichtFrame.IO
         // =========================================================
 
         /// <summary>
-        /// Writes the DataFrame to a CSV file.
+        /// Writes the DataFrame to a CSV file at the specified path.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="path">The full path to the output file. Will be overwritten if it exists.</param>
+        /// <param name="options">Optional configuration for writing (separator, date format, etc.).</param>
         public static void WriteCsv(this DataFrame df, string path, CsvWriteOptions? options = null)
         {
             CsvWriter.Write(df, path, options);
@@ -21,6 +27,9 @@ namespace LeichtFrame.IO
         /// <summary>
         /// Writes the DataFrame to a stream in CSV format.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="stream">The output stream.</param>
+        /// <param name="options">Optional configuration for writing.</param>
         public static void WriteCsv(this DataFrame df, Stream stream, CsvWriteOptions? options = null)
         {
             CsvWriter.Write(df, stream, options);
@@ -31,8 +40,13 @@ namespace LeichtFrame.IO
         // =========================================================
 
         /// <summary>
-        /// Reads a CSV file from a given path.
+        /// Reads a CSV file from a given path using a specific schema.
         /// </summary>
+        /// <param name="path">The file path to the CSV.</param>
+        /// <param name="schema">The schema definition describing column names and types.</param>
+        /// <param name="hasHeader">Indicates if the first row contains column headers.</param>
+        /// <param name="separator">The character used to separate fields.</param>
+        /// <returns>A populated <see cref="DataFrame"/>.</returns>
         public static DataFrame ReadCsv(string path, DataFrameSchema schema, bool hasHeader = true, char separator = ',')
         {
             using var stream = File.OpenRead(path);
@@ -40,8 +54,14 @@ namespace LeichtFrame.IO
         }
 
         /// <summary>
-        /// Reads a CSV from a stream (e.g. MemoryStream or FileStream).
+        /// Reads a CSV from a stream using a specific schema.
         /// </summary>
+        /// <param name="stream">The input stream containing CSV data.</param>
+        /// <param name="schema">The schema definition describing column names and types.</param>
+        /// <param name="hasHeader">Indicates if the first row contains column headers.</param>
+        /// <param name="separator">The character used to separate fields.</param>
+        /// <returns>A populated <see cref="DataFrame"/>.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if stream or schema is null.</exception>
         public static DataFrame ReadCsv(Stream stream, DataFrameSchema schema, bool hasHeader = true, char separator = ',')
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));

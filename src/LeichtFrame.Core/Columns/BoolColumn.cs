@@ -3,16 +3,27 @@ using System.Runtime.CompilerServices;
 
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// A high-performance column for storing boolean values.
+    /// Uses internal bit-packing (1 bit per boolean) to reduce memory usage by 87.5% compared to bool[].
+    /// </summary>
     public class BoolColumn : Column<bool>, IDisposable
     {
         private byte[] _data; // 8 bools per byte
         private NullBitmap? _nulls;
         private int _length;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BoolColumn"/> class.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <param name="capacity">The initial capacity (number of rows).</param>
+        /// <param name="isNullable">Whether the column supports null values.</param>
         public BoolColumn(string name, int capacity = 16, bool isNullable = false)
             : base(name, isNullable)
         {
             _length = 0;
+            // Calculate required bytes: (capacity + 7) / 8
             int byteCount = (capacity + 7) >> 3;
             _data = ArrayPool<byte>.Shared.Rent(byteCount);
             Array.Clear(_data, 0, byteCount);
@@ -23,19 +34,30 @@ namespace LeichtFrame.Core
             }
         }
 
+        /// <inheritdoc />
         public override int Length => _length;
 
+        /// <summary>
+        /// Gets the raw values as memory. 
+        /// <para>
+        /// <strong>Not Supported for BoolColumn:</strong> Because booleans are bit-packed, they cannot be represented as a contiguous <see cref="ReadOnlyMemory{Boolean}"/>.
+        /// Use <see cref="Get(int)"/> or specialized bulk operations instead.
+        /// </para>
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown.</exception>
         public override ReadOnlyMemory<bool> Values => throw new NotSupportedException(
             "BoolColumn uses bit-packed storage. Cannot return ReadOnlyMemory<bool>. Use GetValue or dedicated bulk methods.");
 
         // --- Core Data Access ---
 
+        /// <inheritdoc />
         public override bool Get(int index)
         {
             CheckBounds(index);
             return (_data[index >> 3] & (1 << (index & 7))) != 0;
         }
 
+        /// <inheritdoc />
         public override void SetValue(int index, bool value)
         {
             CheckBounds(index);
@@ -55,6 +77,7 @@ namespace LeichtFrame.Core
                 _data[byteIndex] &= (byte)~bitMask;
         }
 
+        /// <inheritdoc />
         public override void Append(bool value)
         {
             EnsureCapacity(_length + 1);
@@ -63,6 +86,10 @@ namespace LeichtFrame.Core
             _length++;
         }
 
+        /// <summary>
+        /// Appends a nullable boolean to the column.
+        /// </summary>
+        /// <param name="value">The value to append, or null.</param>
         public void Append(bool? value)
         {
             EnsureCapacity(_length + 1);
@@ -82,12 +109,14 @@ namespace LeichtFrame.Core
 
         // --- Null Handling ---
 
+        /// <inheritdoc />
         public override bool IsNull(int index)
         {
             CheckBounds(index);
             return _nulls != null && _nulls.IsNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNull(int index)
         {
             CheckBounds(index);
@@ -96,6 +125,9 @@ namespace LeichtFrame.Core
             _nulls.SetNull(index);
         }
 
+        /// <summary>
+        /// Marks the value at the specified index as not null.
+        /// </summary>
         public override void SetNotNull(int index)
         {
             CheckBounds(index);
@@ -104,6 +136,9 @@ namespace LeichtFrame.Core
 
         // --- Bulk Operations ---
 
+        /// <summary>
+        /// Checks if any value in the column is true (optimized bit-scan).
+        /// </summary>
         public bool AnyTrue()
         {
             if (_nulls == null)
@@ -129,6 +164,9 @@ namespace LeichtFrame.Core
             }
         }
 
+        /// <summary>
+        /// Checks if all values in the column are true (optimized bit-scan).
+        /// </summary>
         public bool AllTrue()
         {
             if (_length == 0) return true;
@@ -158,6 +196,7 @@ namespace LeichtFrame.Core
 
         // --- Memory ---
 
+        /// <inheritdoc />
         public override void EnsureCapacity(int minCapacity)
         {
             int currentByteCap = _data.Length;
@@ -183,6 +222,7 @@ namespace LeichtFrame.Core
             if ((uint)index >= (uint)_length) throw new IndexOutOfRangeException();
         }
 
+        /// <inheritdoc />
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
             var newCol = new BoolColumn(Name, indices.Count, IsNullable);
@@ -202,6 +242,7 @@ namespace LeichtFrame.Core
             return newCol;
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_data != null)

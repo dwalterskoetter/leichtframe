@@ -3,14 +3,34 @@ using LeichtFrame.Core;
 
 namespace LeichtFrame.IO
 {
+    /// <summary>
+    /// Provides high-performance methods to read CSV files into a <see cref="DataFrame"/>.
+    /// Supports automatic schema inference and strongly-typed POCO mapping.
+    /// </summary>
     public static class CsvReader
     {
+        /// <summary>
+        /// Reads a CSV file using a manually defined schema.
+        /// Use this if you want to define columns dynamically at runtime.
+        /// </summary>
+        /// <param name="path">The file path to the CSV.</param>
+        /// <param name="schema">The schema definition containing column names and types.</param>
+        /// <param name="options">Optional CSV parsing options (separator, culture).</param>
+        /// <returns>A populated <see cref="DataFrame"/>.</returns>
         public static DataFrame Read(string path, DataFrameSchema schema, CsvReadOptions? options = null)
         {
             using var stream = File.OpenRead(path);
             return Read(stream, schema, options);
         }
 
+
+        /// <summary>
+        /// Reads a CSV from a stream using a manually defined schema.
+        /// </summary>
+        /// <param name="stream">The input stream containing CSV data.</param>
+        /// <param name="schema">The schema definition containing column names and types.</param>
+        /// <param name="options">Optional CSV parsing options.</param>
+        /// <returns>A populated <see cref="DataFrame"/>.</returns>
         public static DataFrame Read(Stream stream, DataFrameSchema schema, CsvReadOptions? options = null)
         {
             options ??= new CsvReadOptions();
@@ -283,8 +303,11 @@ namespace LeichtFrame.IO
         }
 
         /// <summary>
-        /// Reads a CSV stream using a POCO class to define the schema strongly typed.
+        /// Reads a CSV from a stream using a POCO class schema.
         /// </summary>
+        /// <typeparam name="T">The POCO class defining the schema.</typeparam>
+        /// <param name="stream">The input stream.</param>
+        /// <param name="options">Optional CSV parsing options.</param>
         public static DataFrame Read<T>(Stream stream, CsvReadOptions? options = null)
         {
             var schema = DataFrameSchema.FromType<T>();

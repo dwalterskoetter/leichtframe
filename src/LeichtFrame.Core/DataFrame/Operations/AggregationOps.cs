@@ -1,11 +1,18 @@
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Provides extension methods for calculating aggregations (Sum, Min, Max, Mean) on DataFrames.
+    /// </summary>
     public static class DataFrameAggregationExtensions
     {
         /// <summary>
         /// Calculates the Sum of a numeric column. Ignores null values.
         /// Returns 0 if column is empty.
         /// </summary>
+        /// <param name="df">The DataFrame to operate on.</param>
+        /// <param name="columnName">The name of the column to sum.</param>
+        /// <returns>The sum as a double.</returns>
+        /// <exception cref="NotSupportedException">Thrown if the column type is not numeric.</exception>
         public static double Sum(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -45,6 +52,9 @@ namespace LeichtFrame.Core
         /// Calculates the Minimum value of a numeric column. Ignores null values.
         /// Returns 0 (or default) if no values exist.
         /// </summary>
+        /// <param name="df">The DataFrame to operate on.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The minimum value found.</returns>
         public static double Min(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -77,6 +87,9 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the Maximum value of a numeric column. Ignores null values.
         /// </summary>
+        /// <param name="df">The DataFrame to operate on.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The maximum value found.</returns>
         public static double Max(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -109,6 +122,9 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the arithmetic Mean (Average) of a numeric column. Ignores null values.
         /// </summary>
+        /// <param name="df">The DataFrame to operate on.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The average value.</returns>
         public static double Mean(this DataFrame df, string columnName)
         {
             // Mean = Sum / Count (of non-nulls)
@@ -141,12 +157,17 @@ namespace LeichtFrame.Core
         }
     }
 
+    /// <summary>
+    /// Provides extension methods for performing aggregations on grouped dataframes.
+    /// </summary>
     public static class GroupAggregationExtensions
     {
         /// <summary>
         /// Aggregates the grouped data by counting rows in each group.
         /// Returns a new DataFrame with columns: [GroupColumn, "Count"].
         /// </summary>
+        /// <param name="gdf">The grouped dataframe.</param>
+        /// <returns>A new dataframe containing the group keys and their counts.</returns>
         public static DataFrame Count(this GroupedDataFrame gdf)
         {
             // 1. Prepare Columns
@@ -184,6 +205,9 @@ namespace LeichtFrame.Core
         /// Aggregates the grouped data by summing values in the specified column.
         /// Returns a new DataFrame with columns: [GroupColumn, "Sum_TargetColumn"].
         /// </summary>
+        /// <param name="gdf">The grouped dataframe.</param>
+        /// <param name="aggregateColumnName">The column to sum up per group.</param>
+        /// <returns>A new dataframe containing the group keys and the sums.</returns>
         public static DataFrame Sum(this GroupedDataFrame gdf, string aggregateColumnName)
         {
             var sourceKeyCol = gdf.Source[gdf.GroupColumnName];

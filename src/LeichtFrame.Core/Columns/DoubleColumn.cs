@@ -2,12 +2,22 @@ using System.Buffers;
 
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// A high-performance column for storing <see cref="double"/> values.
+    /// Supports optimized statistical operations like Sum, Min, and Max using contiguous memory.
+    /// </summary>
     public class DoubleColumn : Column<double>, IDisposable
     {
         private double[] _data;
         private NullBitmap? _nulls;
         private int _length;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DoubleColumn"/> class.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <param name="capacity">The initial capacity (number of rows).</param>
+        /// <param name="isNullable">Whether the column supports null values.</param>
         public DoubleColumn(string name, int capacity = 16, bool isNullable = false)
             : base(name, isNullable)
         {
@@ -16,16 +26,22 @@ namespace LeichtFrame.Core
             if (isNullable) _nulls = new NullBitmap(capacity);
         }
 
+        /// <inheritdoc />
         public override int Length => _length;
+
+        /// <inheritdoc />
         public override ReadOnlyMemory<double> Values => new ReadOnlyMemory<double>(_data, 0, _length);
 
         // --- Core Data Access ---
+
+        /// <inheritdoc />
         public override double Get(int index)
         {
             CheckBounds(index);
             return _data[index];
         }
 
+        /// <inheritdoc />
         public override void SetValue(int index, double value)
         {
             CheckBounds(index);
@@ -33,6 +49,7 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
+        /// <inheritdoc />
         public override void Append(double value)
         {
             EnsureCapacity(_length + 1);
@@ -41,6 +58,11 @@ namespace LeichtFrame.Core
             _length++;
         }
 
+        /// <summary>
+        /// Appends a nullable double value to the column.
+        /// </summary>
+        /// <param name="value">The value to append, or null.</param>
+        /// <exception cref="InvalidOperationException">Thrown if null is passed to a non-nullable column.</exception>
         public void Append(double? value)
         {
             EnsureCapacity(_length + 1);
@@ -59,12 +81,15 @@ namespace LeichtFrame.Core
         }
 
         // --- Null Handling ---
+
+        /// <inheritdoc />
         public override bool IsNull(int index)
         {
             CheckBounds(index);
             return _nulls != null && _nulls.IsNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNull(int index)
         {
             CheckBounds(index);
@@ -73,6 +98,7 @@ namespace LeichtFrame.Core
             _nulls.SetNull(index);
         }
 
+        /// <inheritdoc />
         public override void SetNotNull(int index)
         {
             CheckBounds(index);
@@ -80,6 +106,11 @@ namespace LeichtFrame.Core
         }
 
         // --- Statistical Helpers ---
+
+        /// <summary>
+        /// Calculates the sum of all non-null values in the column.
+        /// </summary>
+        /// <returns>The sum of values.</returns>
         public double Sum()
         {
             double sum = 0;
@@ -99,6 +130,10 @@ namespace LeichtFrame.Core
             return sum;
         }
 
+        /// <summary>
+        /// Finds the minimum value in the column. Ignores null values.
+        /// Returns 0 if the column is empty or contains only nulls.
+        /// </summary>
         public double Min()
         {
             if (_length == 0) return 0;
@@ -118,6 +153,10 @@ namespace LeichtFrame.Core
             return hasValue ? min : 0;
         }
 
+        /// <summary>
+        /// Finds the maximum value in the column. Ignores null values.
+        /// Returns 0 if the column is empty or contains only nulls.
+        /// </summary>
         public double Max()
         {
             if (_length == 0) return 0;
@@ -138,6 +177,8 @@ namespace LeichtFrame.Core
         }
 
         // --- Memory ---
+
+        /// <inheritdoc />
         public override void EnsureCapacity(int minCapacity)
         {
             if (_data.Length >= minCapacity) return;
@@ -156,6 +197,7 @@ namespace LeichtFrame.Core
             if ((uint)index >= (uint)_length) throw new IndexOutOfRangeException();
         }
 
+        /// <inheritdoc />
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
             var newCol = new DoubleColumn(Name, indices.Count, IsNullable);
@@ -175,6 +217,7 @@ namespace LeichtFrame.Core
             return newCol;
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_data != null)

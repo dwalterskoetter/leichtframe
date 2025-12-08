@@ -1,5 +1,8 @@
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Provides extension methods for grouping operations on <see cref="DataFrame"/>.
+    /// </summary>
     public static class DataFrameGroupingExtensions
     {
         // Sentinel object to represent 'null' in the dictionary key
@@ -9,6 +12,10 @@ namespace LeichtFrame.Core
         /// Groups the rows of the DataFrame by the values in the specified column.
         /// Uses a Hash-Map approach (O(n)).
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="columnName">The name of the column to group by.</param>
+        /// <returns>A <see cref="GroupedDataFrame"/> object used to apply aggregations.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="columnName"/> is null or empty.</exception>
         public static GroupedDataFrame GroupBy(this DataFrame df, string columnName)
         {
             if (string.IsNullOrEmpty(columnName)) throw new ArgumentNullException(nameof(columnName));

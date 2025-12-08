@@ -15,6 +15,9 @@
     <PackageTags>dataframe;data;analysis;csv;parquet;performance;span;memory</PackageTags>
     <PackageProjectUrl>https://github.com/dwalterskoetter/leichtFrame</PackageProjectUrl>
     
+    <!-- Documentation & Warnings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
     <!-- Build Settings -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -1,11 +1,21 @@
+using System;
+
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Provides helper extension methods for interacting with <see cref="IColumn"/> instances.
+    /// </summary>
     public static class ColumnExtensions
     {
         /// <summary>
-        /// Helper extension to get a typed value from a generic IColumn.
-        /// Performs a cast and calls the typed GetValue method.
+        /// Helper extension to get a typed value from a generic <see cref="IColumn"/>.
+        /// Performs a cast and calls the typed GetValue method if possible.
         /// </summary>
+        /// <typeparam name="T">The expected return type.</typeparam>
+        /// <param name="column">The column instance.</param>
+        /// <param name="index">The row index to retrieve.</param>
+        /// <returns>The value of type T.</returns>
+        /// <exception cref="InvalidCastException">Thrown if the column type does not match T.</exception>
         public static T Get<T>(this IColumn column, int index)
         {
             // Fast Path: If it is already the correct typed interface
@@ -21,8 +31,11 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Appends an untyped object value to the column. 
-        /// Throws if the value type does not match the column type.
+        /// Handles type checking and dispatching to the concrete Append method.
         /// </summary>
+        /// <param name="column">The target column.</param>
+        /// <param name="value">The value to append (can be null if supported).</param>
+        /// <exception cref="NotSupportedException">Thrown if the value type is incompatible or the column type is unknown.</exception>
         public static void AppendObject(this IColumn column, object? value)
         {
             if (value == null)

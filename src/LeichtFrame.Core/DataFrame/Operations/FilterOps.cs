@@ -1,11 +1,18 @@
 namespace LeichtFrame.Core
 {
+    /// <summary>
+    /// Provides extension methods for filtering <see cref="DataFrame"/> rows based on predicates.
+    /// </summary>
     public static class DataFrameFilterExtensions
     {
         /// <summary>
-        /// Filters rows based on a predicate.
-        /// Creates a new DataFrame with COPIED data containing only the matching rows.
+        /// Filters rows based on a predicate function.
+        /// Creates a new <see cref="DataFrame"/> with COPIED data containing only the matching rows.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="predicate">A function to test each row. Return <c>true</c> to keep the row, <c>false</c> to drop it.</param>
+        /// <returns>A new DataFrame containing only the rows that satisfy the condition.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="predicate"/> is null.</exception>
         public static DataFrame Where(this DataFrame df, Func<RowView, bool> predicate)
         {
             if (predicate == null) throw new ArgumentNullException(nameof(predicate));

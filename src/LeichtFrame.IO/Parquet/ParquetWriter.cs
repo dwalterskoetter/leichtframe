@@ -4,8 +4,18 @@ using Parquet.Schema;
 
 namespace LeichtFrame.IO
 {
+    /// <summary>
+    /// Provides methods for writing <see cref="DataFrame"/> objects into Apache Parquet format.
+    /// Handles schema mapping and efficient data conversion for storage.
+    /// </summary>
     public static class ParquetWriter
     {
+        /// <summary>
+        /// Writes the DataFrame to a Parquet file at the specified path.
+        /// If the file exists, it will be overwritten.
+        /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="path">The output file path.</param>
         public static void Write(DataFrame df, string path)
         {
             // Allow overwrite
@@ -13,12 +23,23 @@ namespace LeichtFrame.IO
             Write(df, stream);
         }
 
+        /// <summary>
+        /// Writes the DataFrame to a stream in Parquet format synchronously.
+        /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="stream">The writable output stream.</param>
         public static void Write(DataFrame df, Stream stream)
         {
             // Synchronous Wrapper
             WriteAsync(df, stream).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// Writes the DataFrame to a stream in Parquet format asynchronously.
+        /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="stream">The writable output stream.</param>
+        /// <returns>A task representing the asynchronous write operation.</returns>
         public static async Task WriteAsync(DataFrame df, Stream stream)
         {
             // 1. Schema Mapping (LeichtFrame -> Parquet)
