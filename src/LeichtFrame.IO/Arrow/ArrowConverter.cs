@@ -14,7 +14,7 @@ namespace LeichtFrame.IO
         /// <summary>
         /// Converts an Apache Arrow RecordBatch into a LeichtFrame DataFrame.
         /// <para>
-        /// <strong>Note:</strong> Currently performs a deep copy of the data (Phase 1 implementation).
+        /// **Note:** Currently performs a deep copy of the data.
         /// Zero-copy integration is planned for future releases.
         /// </para>
         /// </summary>

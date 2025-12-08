@@ -34,6 +34,7 @@ public abstract class Column<T> : Column, IColumn<T>
 
     // --- Interface Implementations ---
 
+    /// <exclude />
     T IColumn<T>.GetValue(int index) => Get(index);
 
     /// <inheritdoc />

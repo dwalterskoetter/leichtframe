@@ -38,9 +38,9 @@ namespace LeichtFrame.Core
         public override int Length => _length;
 
         /// <summary>
-        /// Gets the raw values as memory. 
+        /// Gets the raw values as memory.             
         /// <para>
-        /// <strong>Not Supported for BoolColumn:</strong> Because booleans are bit-packed, they cannot be represented as a contiguous <see cref="ReadOnlyMemory{Boolean}"/>.
+        /// **Not Supported for BoolColumn:** Because booleans are bit-packed, they cannot be represented as a contiguous <see cref="ReadOnlyMemory{Boolean}"/>.
         /// Use <see cref="Get(int)"/> or specialized bulk operations instead.
         /// </para>
         /// </summary>
