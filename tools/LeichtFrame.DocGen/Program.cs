@@ -6,6 +6,17 @@ namespace LeichtFrame.DocGen
 {
     class Program
     {
+        static readonly HashSet<string> _ignoredTypes = new()
+        {
+            "LeichtFrame.Core.Column",
+            "LeichtFrame.Core.Column`1",
+            "LeichtFrame.Core.ColumnFactory",
+            "LeichtFrame.IO.ArrowConverter",
+            "LeichtFrame.Benchmarks",
+            "LeichtFrame.Core.Tests",
+            "LeichtFrame.IO.Tests"
+        };
+
         static readonly List<string> _searchDirectories = new();
 
         static void Main(string[] args)
@@ -14,14 +25,15 @@ namespace LeichtFrame.DocGen
 
             var inputs = new[]
             {
-                new { Dll = "src/LeichtFrame.Core/bin/Release/net8.0/LeichtFrame.Core.dll", Name = "LeichtFrame.Core" },
-                new { Dll = "src/LeichtFrame.IO/bin/Release/net8.0/LeichtFrame.IO.dll", Name = "LeichtFrame.IO" }
+                new { Dll = "artifacts/doc_bin/LeichtFrame.Core.dll", Name = "LeichtFrame.Core" },
+                new { Dll = "artifacts/doc_bin/LeichtFrame.IO.dll", Name = "LeichtFrame.IO" }
             };
 
             foreach (var input in inputs)
             {
                 var fullPath = Path.GetFullPath(Path.Combine(root, input.Dll));
                 var dir = Path.GetDirectoryName(fullPath);
+
                 if (dir != null && !_searchDirectories.Contains(dir))
                 {
                     _searchDirectories.Add(dir);
@@ -31,12 +43,9 @@ namespace LeichtFrame.DocGen
             AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
 
             var outputBaseDir = Path.Combine(root, "website/docs");
-
             var generatedRootDir = Path.Combine(outputBaseDir, "LeichtFrame");
-            if (Directory.Exists(generatedRootDir))
-            {
-                Directory.Delete(generatedRootDir, true);
-            }
+
+            if (Directory.Exists(generatedRootDir)) Directory.Delete(generatedRootDir, true);
 
             Console.WriteLine("🚀 Starting Pure .NET Doc Generator...");
 
@@ -47,7 +56,7 @@ namespace LeichtFrame.DocGen
 
                 if (!File.Exists(dllPath))
                 {
-                    Console.WriteLine($"❌ DLL missing: {dllPath}");
+                    Console.WriteLine($"❌ DLL missing: {dllPath} (Run generate_docs.sh first!)");
                     continue;
                 }
 
@@ -76,14 +85,18 @@ namespace LeichtFrame.DocGen
                 {
                     types = assembly.GetExportedTypes()
                         .Where(t => !t.Name.StartsWith("<") && !t.IsSpecialName)
+                        .Where(t => !_ignoredTypes.Contains(t.FullName!) && t.GetCustomAttribute<ObsoleteAttribute>() == null)
                         .OrderBy(t => t.Name)
                         .ToList();
                 }
                 catch (ReflectionTypeLoadException ex)
                 {
-                    Console.WriteLine($"⚠️ Warning: Some types in {input.Name} could not be loaded.");
-                    types = ex.Types.Where(t => t != null && !t.Name.StartsWith("<") && !t.IsSpecialName)
-                                    .OrderBy(t => t!.Name).Select(t => t!).ToList();
+                    Console.WriteLine($"⚠️ Warning: Partial load for {input.Name}. Missing dependencies?");
+                    types = ex.Types.Where(t => t != null
+                        && !t.Name.StartsWith("<")
+                        && !t.IsSpecialName
+                        && !_ignoredTypes.Contains(t.FullName!))
+                        .Select(t => t!).ToList();
                 }
 
                 GenerateNamespaceIndex(input.Name, types, targetDir, docMap);
@@ -101,7 +114,9 @@ namespace LeichtFrame.DocGen
             if (args.Name.Contains(".resources")) return null;
 
             var assemblyName = new AssemblyName(args.Name).Name;
-            var loaded = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == assemblyName);
+
+            var loaded = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == assemblyName);
             if (loaded != null) return loaded;
 
             var fileName = assemblyName + ".dll";
@@ -119,19 +134,25 @@ namespace LeichtFrame.DocGen
         static void PreloadDependencies(string? directory)
         {
             if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory)) return;
+
             foreach (var dll in Directory.GetFiles(directory, "*.dll"))
             {
-                try { Assembly.LoadFrom(dll); } catch { }
+                try
+                {
+                    var name = AssemblyName.GetAssemblyName(dll).Name;
+                    if (!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == name))
+                    {
+                        Assembly.LoadFrom(dll);
+                    }
+                }
+                catch { }
             }
         }
 
         static void GenerateNamespaceIndex(string namespaceName, List<Type> types, string outputDir, Dictionary<string, string> docMap)
         {
             var sb = new StringBuilder();
-
-            var shortName = namespaceName.Contains('.')
-                ? namespaceName.Substring(namespaceName.LastIndexOf('.') + 1)
-                : namespaceName;
+            var shortName = namespaceName.Contains('.') ? namespaceName.Substring(namespaceName.LastIndexOf('.') + 1) : namespaceName;
 
             sb.AppendLine("---");
             sb.AppendLine($"sidebar_label: {shortName}");
@@ -139,39 +160,34 @@ namespace LeichtFrame.DocGen
             sb.AppendLine($"sidebar_position: 0");
             sb.AppendLine("---");
             sb.AppendLine();
-
             sb.AppendLine($"# Namespace {namespaceName}");
             sb.AppendLine();
             sb.AppendLine("Contains the following types:");
             sb.AppendLine();
-
             sb.AppendLine("| Type | Description |");
             sb.AppendLine("| --- | --- |");
 
             foreach (var t in types)
             {
                 string typeId = $"T:{t.FullName}";
-                string summary = "";
-                if (docMap.TryGetValue(typeId, out var rawSummary))
-                {
-                    summary = CleanDoc(rawSummary).Split('.')[0] + ".";
-                }
+                string summary = docMap.ContainsKey(typeId) ? docMap[typeId] : "";
+
+                var firstSentence = summary.Split('.')[0];
+                if (!string.IsNullOrWhiteSpace(firstSentence)) firstSentence += ".";
 
                 string displayName = ToMdxSafe(CleanTypeName(t));
-
                 string safeFilename = GetSafeFilename(t);
 
-                sb.AppendLine($"| [{displayName}](./{safeFilename}.md) | {ToMdxSafe(summary)} |");
+                sb.AppendLine($"| [{displayName}](./{safeFilename}.md) | {ToMdxSafe(firstSentence)} |");
             }
 
             File.WriteAllText(Path.Combine(outputDir, "index.md"), sb.ToString());
-            Console.WriteLine($"   Generated Index: {namespaceName}/index.md (Label: {shortName})");
+            Console.WriteLine($"   Generated Index: {namespaceName}/index.md");
         }
 
         static void GenerateTypeDoc(Type type, string outputDir, string relativePath, Dictionary<string, string> docMap)
         {
             var sb = new StringBuilder();
-
             string readableName = CleanTypeName(type);
             string mdxSafeName = ToMdxSafe(readableName);
 
@@ -180,7 +196,6 @@ namespace LeichtFrame.DocGen
             sb.AppendLine($"title: {readableName}");
             sb.AppendLine("---");
             sb.AppendLine();
-
             sb.AppendLine($"# {mdxSafeName}");
             sb.AppendLine($"**Namespace:** `{type.Namespace}`");
             sb.AppendLine();
@@ -188,7 +203,7 @@ namespace LeichtFrame.DocGen
             string typeId = $"T:{type.FullName}";
             if (docMap.TryGetValue(typeId, out var summary))
             {
-                sb.AppendLine(ToMdxSafe(summary.Trim()));
+                sb.AppendLine(summary);
                 sb.AppendLine();
             }
 
@@ -202,22 +217,26 @@ namespace LeichtFrame.DocGen
                 foreach (var p in props)
                 {
                     string propId = $"P:{type.FullName}.{p.Name}";
-                    string doc = docMap.ContainsKey(propId) ? CleanDoc(docMap[propId]) : "";
+                    string doc = docMap.ContainsKey(propId) ? docMap[propId] : "";
                     string typeName = CleanTypeName(p.PropertyType);
 
-                    sb.AppendLine($"| `{p.Name}` | `{ToMdxSafe(typeName)}` | {ToMdxSafe(doc)} |");
+                    string propName = p.Name;
+                    var indexParams = p.GetIndexParameters();
+                    if (indexParams.Length > 0)
+                    {
+                        var args = string.Join(", ", indexParams.Select(ip => CleanTypeName(ip.ParameterType)));
+                        propName = $"this[{args}]";
+                    }
+
+                    sb.AppendLine($"| `{propName}` | `{typeName}` | {doc} |");
                 }
                 sb.AppendLine();
             }
 
             var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
-                .Where(m => !m.IsSpecialName
-                            && !m.Name.StartsWith("<")
-                            && m.Name != "GetType"
-                            && m.Name != "ToString"
-                            && m.Name != "Equals"
-                            && m.Name != "GetHashCode"
-                            && m.Name != "Deconstruct")
+                .Where(m => !m.IsSpecialName && !m.Name.StartsWith("<")
+                        && m.Name != "GetType" && m.Name != "ToString" && m.Name != "Equals"
+                        && m.Name != "GetHashCode" && m.Name != "Deconstruct")
                 .OrderBy(m => m.Name);
 
             if (methods.Any())
@@ -230,22 +249,32 @@ namespace LeichtFrame.DocGen
                         var safeMethodName = ToMdxSafe(m.Name);
                         sb.AppendLine($"### {safeMethodName}");
 
-                        var parameters = m.GetParameters();
-                        var paramStr = string.Join(", ", parameters.Select(p => $"{CleanTypeName(p.ParameterType)} {p.Name}"));
-                        var returnType = CleanTypeName(m.ReturnType);
+                        var parameters = m.GetParameters().Select(p =>
+                        {
+                            string prefix = "";
+                            if (p.IsOut) prefix = "out ";
+                            else if (p.ParameterType.IsByRef) prefix = "ref ";
+                            if (p.GetCustomAttribute<ParamArrayAttribute>() != null) prefix += "params ";
 
-                        sb.AppendLine($"```csharp\npublic {returnType} {m.Name}({paramStr})\n```");
+                            return $"{prefix}{CleanTypeName(p.ParameterType)} {p.Name}";
+                        });
+
+                        var paramStr = string.Join(", ", parameters);
+                        var returnType = CleanTypeName(m.ReturnType);
+                        var modifiers = m.IsStatic ? "static " : "";
+
+                        sb.AppendLine($"```csharp\npublic {modifiers}{returnType} {m.Name}({paramStr})\n```");
 
                         string methodId = GetMethodId(m);
                         if (docMap.TryGetValue(methodId, out var mDoc))
                         {
-                            sb.AppendLine(ToMdxSafe(mDoc.Trim()));
+                            sb.AppendLine(mDoc);
                         }
                         sb.AppendLine();
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        sb.AppendLine($"*(Method documentation unavailable due to missing dependencies)*");
+                        sb.AppendLine($"> ⚠️ **Documentation unavailable:** {ex.Message} (Dependency missing?)");
                         sb.AppendLine();
                     }
                 }
@@ -269,7 +298,7 @@ namespace LeichtFrame.DocGen
         static string ToMdxSafe(string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
-            return text.Replace("<", "&lt;").Replace(">", "&gt;");
+            return text.Replace("<", "&lt;").Replace(">", "&gt;").Replace("`", "");
         }
 
         static Dictionary<string, string> LoadXmlDocumentation(string xmlPath)
@@ -283,16 +312,60 @@ namespace LeichtFrame.DocGen
                 foreach (var member in doc.Descendants("member"))
                 {
                     var name = member.Attribute("name")?.Value;
-                    var summary = member.Element("summary")?.Value;
+                    var summaryNode = member.Element("summary");
 
-                    if (name != null && summary != null)
+                    if (name != null && summaryNode != null)
                     {
-                        map[name] = string.Join(" ", summary.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()));
+                        map[name] = XmlToMarkdown(summaryNode);
                     }
                 }
             }
             catch { }
             return map;
+        }
+
+        static string XmlToMarkdown(XElement element)
+        {
+            var sb = new StringBuilder();
+
+            foreach (var node in element.Nodes())
+            {
+                if (node is XText textNode)
+                {
+                    sb.Append(textNode.Value);
+                }
+                else if (node is XElement el)
+                {
+                    if (el.Name == "see")
+                    {
+                        var cref = el.Attribute("cref")?.Value ?? "";
+                        var shortName = cref.Split('.').Last();
+                        if (shortName.Contains(':')) shortName = shortName.Split(':')[1];
+                        if (shortName.Contains('`')) shortName = shortName.Split('`')[0] + "<T>";
+                        sb.Append($"`{shortName}`");
+                    }
+                    else if (el.Name == "paramref")
+                    {
+                        var name = el.Attribute("name")?.Value ?? "";
+                        sb.Append($"`{name}`");
+                    }
+                    else if (el.Name == "c" || el.Name == "code")
+                    {
+                        sb.Append($"`{el.Value}`");
+                    }
+                    else if (el.Name == "para")
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine(XmlToMarkdown(el));
+                        sb.AppendLine();
+                    }
+                    else
+                    {
+                        sb.Append(XmlToMarkdown(el));
+                    }
+                }
+            }
+            return sb.ToString().Trim();
         }
 
         static string GetMethodId(MethodInfo m)
@@ -303,6 +376,12 @@ namespace LeichtFrame.DocGen
             sb.Append(".");
             sb.Append(m.Name);
 
+            if (m.IsGenericMethod)
+            {
+                sb.Append("``");
+                sb.Append(m.GetGenericArguments().Length);
+            }
+
             var parameters = m.GetParameters();
             if (parameters.Length > 0)
             {
@@ -310,7 +389,16 @@ namespace LeichtFrame.DocGen
                 for (int i = 0; i < parameters.Length; i++)
                 {
                     if (i > 0) sb.Append(",");
-                    sb.Append(parameters[i].ParameterType.FullName ?? parameters[i].ParameterType.Name);
+                    var pType = parameters[i].ParameterType;
+
+                    if (pType.IsGenericParameter)
+                    {
+                        sb.Append($"``{pType.GenericParameterPosition}");
+                    }
+                    else
+                    {
+                        sb.Append(pType.FullName?.Replace("&", "") ?? pType.Name.Replace("&", ""));
+                    }
                 }
                 sb.Append(")");
             }
@@ -319,11 +407,14 @@ namespace LeichtFrame.DocGen
 
         static string CleanTypeName(Type t)
         {
+            if (t.IsByRef) t = t.GetElementType()!;
+
             if (t == typeof(int)) return "int";
             if (t == typeof(string)) return "string";
             if (t == typeof(bool)) return "bool";
             if (t == typeof(double)) return "double";
             if (t == typeof(void)) return "void";
+            if (t == typeof(object)) return "object";
 
             if (t.IsGenericType)
             {
@@ -331,7 +422,8 @@ namespace LeichtFrame.DocGen
                 var args = string.Join(", ", t.GetGenericArguments().Select(CleanTypeName));
                 return $"{name}<{args}>";
             }
-            return t.Name.Replace("&", "");
+
+            return t.Name.Split('`')[0].Replace("&", "");
         }
 
         static string CleanDoc(string doc) => doc.Replace("\n", " ").Trim();
