@@ -1,0 +1,67 @@
+/* Der Banner-Hintergrund */
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  
+  /* STANDARD (Light Mode): Ein sanfter Silber/Grau Verlauf */
+  background: linear-gradient(180deg, #f4f4f5 0%, #d4d4d8 100%);
+}
+
+/* DARK MODE: Hier nutzen wir den coolen tiefen Radial-Gradient */
+[data-theme='dark'] .heroBanner {
+  background: radial-gradient(circle at center, #4c535e 0%, #17181b 100%);
+}
+
+/* Anpassung für Mobile */
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+/* Container für die Buttons */
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px; 
+  margin-top: 30px;
+}
+
+/* Der Titel (LeichtFrame) - High-Tech Gradient */
+.titleGradient {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+  
+  /* Standard (Light Mode): Dunkles Anthrazit zu Schwarz */
+  background: -webkit-linear-gradient(120deg, #52525b 0%, #18181b 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-theme='dark'] .titleGradient {
+  /* Dark Mode: Weiß zu Silber */
+  background: -webkit-linear-gradient(120deg, #ffffff 30%, #94a3b8 90%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* NEU: Der Untertitel (Tagline) explizit stylen */
+.subtitle {
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+  font-weight: 400;
+  
+  /* Light Mode: Dunkles Grau (gut lesbar auf Silber) */
+  color: #3f3f46; 
+}
+
+[data-theme='dark'] .subtitle {
+  /* Dark Mode: Helles Grau/Silber (gut lesbar auf Dunkelblau) */
+  color: #e2e8f0;
+}

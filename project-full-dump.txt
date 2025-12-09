@@ -1109,6 +1109,8 @@ Open the resulting `.gcdump` file in Visual Studio or VS Code (using the **.NET 
 
 _Saved: docs/PROFILING.md_
 
+===== FILE: project-full-dump.txt =====
+
 ===== FILE: scripts/generate_docs.sh =====
 #!/bin/bash
 set -e # Exits as soon as any command fails
@@ -1118,27 +1120,17 @@ echo "🚀 [1/4] Building Solution (Release)..."
 dotnet build -c Release --verbosity quiet
 
 echo "🧹 [2/4] Cleaning & Preparing website directories..."
-# Ensure target directories exist
-mkdir -p website/docs/api
-mkdir -p website/docs/guides
+# Ensure target directory exists
+mkdir -p website/docs
 
 # Delete old API documentation (so deleted classes also disappear here)
-rm -rf website/docs/api/*
+rm -rf website/docs*
 
-echo "📂 [3/4] Copying manual documentation..."
-# This is where the magic happens: We copy PROFILING.md into the website folder
-if [ -f "docs/PROFILING.md" ]; then
-    cp docs/PROFILING.md website/docs/guides/profiling.md
-    echo "   -> Copied PROFILING.md to website/docs/guides/"
-else
-    echo "⚠️ Warning: docs/PROFILING.md not found!"
-fi
-
-echo "📝 [4/4] Generating API Reference (MdDocs)..."
+echo "📝 [3/3] Generating Documentation..."
 # Generates the API documentation from the DLLs
 dotnet tool run mddocs apireference \
   --assemblies "src/LeichtFrame.Core/bin/Release/net8.0/LeichtFrame.Core.dll" "src/LeichtFrame.IO/bin/Release/net8.0/LeichtFrame.IO.dll" \
-  --outdir "website/docs/api"
+  --outdir "website/docs"
 
 echo "✅ Documentation generation complete!"
 ===== FILE: src/LeichtFrame.Benchmarks/AggregationBenchmarks.cs =====
@@ -1788,9 +1780,9 @@ namespace LeichtFrame.Core
         public override int Length => _length;
 
         /// <summary>
-        /// Gets the raw values as memory. 
+        /// Gets the raw values as memory.             
         /// <para>
-        /// <b>Not Supported for BoolColumn:</b> Because booleans are bit-packed, they cannot be represented as a contiguous <see cref="ReadOnlyMemory{Boolean}"/>.
+        /// **Not Supported for BoolColumn:** Because booleans are bit-packed, they cannot be represented as a contiguous <see cref="ReadOnlyMemory{Boolean}"/>.
         /// Use <see cref="Get(int)"/> or specialized bulk operations instead.
         /// </para>
         /// </summary>
@@ -2151,6 +2143,7 @@ public abstract class Column<T> : Column, IColumn<T>
 
     // --- Interface Implementations ---
 
+    /// <exclude />
     T IColumn<T>.GetValue(int index) => Get(index);
 
     /// <inheritdoc />
@@ -2662,10 +2655,10 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Ensures the column has space for at least the specified number of elements.
-        /// If the capacity is increased, the underlying buffer is swapped.
+        /// If the capacity is increased, the underlying buffer is swapped.           
         /// <para>
-        /// <strong>SAFETY WARNING:</strong> Because this library uses array pooling, 
-        /// calling this method may return the old buffer to the pool.
+        /// **SAFETY WARNING:** Because this library uses array pooling, 
+        /// calling this method may return the old buffer to the pool.  
         /// Existing Spans pointing to the old buffer will become invalid.
         /// </para>
         /// </summary>
@@ -2962,7 +2955,9 @@ namespace LeichtFrame.Core
         /// <inheritdoc />
         public bool IsNullable => _source.IsNullable;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the underlying memory storage of the slice.
+        /// </summary>
         public ReadOnlyMemory<T> Values => _source.Slice(_offset, _length);
 
         /// <inheritdoc />
@@ -2970,7 +2965,7 @@ namespace LeichtFrame.Core
 
         // --- Data Access ---
 
-        /// <inheritdoc />
+        /// <inheritdoc cref="IColumn{T}.GetValue(int)" />
         public T Get(int index)
         {
             CheckBounds(index);
@@ -2978,6 +2973,7 @@ namespace LeichtFrame.Core
         }
 
         // Interface Implementation
+        /// <exclude />
         T IColumn<T>.GetValue(int index) => Get(index);
 
         /// <inheritdoc />
@@ -4856,7 +4852,7 @@ namespace LeichtFrame.IO
         /// <summary>
         /// Converts an Apache Arrow RecordBatch into a LeichtFrame DataFrame.
         /// <para>
-        /// <strong>Note:</strong> Currently performs a deep copy of the data (Phase 1 implementation).
+        /// **Note:** Currently performs a deep copy of the data.
         /// Zero-copy integration is planned for future releases.
         /// </para>
         /// </summary>

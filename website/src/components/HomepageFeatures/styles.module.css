@@ -1,0 +1,17 @@
+.features {
+  display: flex;
+  align-items: center;
+  padding: 4rem 0;
+  width: 100%;
+}
+
+.featureTitle {
+  margin-top: 1rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ifm-color-primary-dark);
+}
+
+[data-theme='dark'] .featureTitle {
+  color: var(--ifm-color-primary-light);
+}
