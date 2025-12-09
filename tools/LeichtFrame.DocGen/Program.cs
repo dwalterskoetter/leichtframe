@@ -256,7 +256,12 @@ namespace LeichtFrame.DocGen
 
         static string GetSafeFilename(Type t)
         {
-            return t.Name.Replace('`', '_');
+            if (t.IsGenericType)
+            {
+                var cleanName = t.Name.Split('`')[0];
+                return cleanName + "T";
+            }
+            return t.Name;
         }
 
         static string ToMdxSafe(string text)
