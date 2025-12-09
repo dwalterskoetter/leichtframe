@@ -156,10 +156,12 @@ namespace LeichtFrame.DocGen
                 {
                     summary = CleanDoc(rawSummary).Split('.')[0] + ".";
                 }
-                string typeNameSafe = t.Name.Replace("<", "&lt;").Replace(">", "&gt;");
+
+                string displayName = ToMdxSafe(CleanTypeName(t));
 
                 string safeFilename = GetSafeFilename(t);
-                sb.AppendLine($"| [{typeNameSafe}](./{safeFilename}.md) | {ToMdxSafe(summary)} |");
+
+                sb.AppendLine($"| [{displayName}](./{safeFilename}.md) | {ToMdxSafe(summary)} |");
             }
 
             File.WriteAllText(Path.Combine(outputDir, "index.md"), sb.ToString());
