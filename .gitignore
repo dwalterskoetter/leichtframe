@@ -135,10 +135,17 @@ $tf/
 
 # --- Documentation Generation ---
 # Ignore generated API docs (they are rebuilt by CI/Script)
-website/docs/api/
+website/docs/
 
-# Ignore copied guides (they exist in /docs originally)
-website/docs/guides/
+# Docusaurus cache directory (local development)
+website/.docusaurus/
+
+# Docusaurus build output (static files)
+website/build/
+
+# Yarn/NPM debug logs (optional, but clean)
+yarn-error.log
+npm-debug.log*
 
 # ReSharper is a .NET coding add-in
 _ReSharper*/
