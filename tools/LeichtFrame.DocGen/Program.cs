@@ -32,7 +32,6 @@ namespace LeichtFrame.DocGen
 
             var outputBaseDir = Path.Combine(root, "website/docs");
 
-            // Cleanup
             var generatedRootDir = Path.Combine(outputBaseDir, "LeichtFrame");
             if (Directory.Exists(generatedRootDir))
             {
@@ -159,7 +158,8 @@ namespace LeichtFrame.DocGen
                 }
                 string typeNameSafe = t.Name.Replace("<", "&lt;").Replace(">", "&gt;");
 
-                sb.AppendLine($"| [{typeNameSafe}](./{t.Name}.md) | {ToMdxSafe(summary)} |");
+                string safeFilename = GetSafeFilename(t);
+                sb.AppendLine($"| [{typeNameSafe}](./{safeFilename}.md) | {ToMdxSafe(summary)} |");
             }
 
             File.WriteAllText(Path.Combine(outputDir, "index.md"), sb.ToString());
@@ -249,8 +249,14 @@ namespace LeichtFrame.DocGen
                 }
             }
 
-            File.WriteAllText(Path.Combine(outputDir, $"{type.Name}.md"), sb.ToString());
-            Console.WriteLine($"   Generated: {relativePath}/{type.Name}.md");
+            string safeFilename = GetSafeFilename(type);
+            File.WriteAllText(Path.Combine(outputDir, $"{safeFilename}.md"), sb.ToString());
+            Console.WriteLine($"   Generated: {relativePath}/{safeFilename}.md");
+        }
+
+        static string GetSafeFilename(Type t)
+        {
+            return t.Name.Replace('`', '_');
         }
 
         static string ToMdxSafe(string text)
