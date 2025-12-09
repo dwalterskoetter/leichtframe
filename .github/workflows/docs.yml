@@ -40,9 +40,8 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Build for DocGen
-        # We build Release to ensure the XML files are present
-        run: dotnet build -c Release
+      - name: Build for DocGen (Publish to include dependencies)
+        run: dotnet publish -c Release
 
       - name: Generate API Docs (Markdown)
         run: |
