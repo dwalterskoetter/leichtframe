@@ -130,17 +130,13 @@ namespace LeichtFrame.DocGen
         {
             var sb = new StringBuilder();
 
-            // --- ÄNDERUNG: Dynamischer Sidebar Label ---
-            // Wir nehmen den Teil nach dem letzten Punkt.
-            // LeichtFrame.Core -> Core
-            // LeichtFrame.IO -> IO
             var shortName = namespaceName.Contains('.')
                 ? namespaceName.Substring(namespaceName.LastIndexOf('.') + 1)
                 : namespaceName;
 
             sb.AppendLine("---");
-            sb.AppendLine($"sidebar_label: {shortName}"); // Hier stand vorher "Overview"
-            sb.AppendLine($"title: {namespaceName}");      // Titel bleibt der volle Name
+            sb.AppendLine($"sidebar_label: {shortName}");
+            sb.AppendLine($"title: {namespaceName}");
             sb.AppendLine($"sidebar_position: 0");
             sb.AppendLine("---");
             sb.AppendLine();
@@ -162,7 +158,8 @@ namespace LeichtFrame.DocGen
                     summary = CleanDoc(rawSummary).Split('.')[0] + ".";
                 }
                 string typeNameSafe = t.Name.Replace("<", "&lt;").Replace(">", "&gt;");
-                sb.AppendLine($"| [{typeNameSafe}]({t.Name}) | {ToMdxSafe(summary)} |");
+
+                sb.AppendLine($"| [{typeNameSafe}](./{t.Name}.md) | {ToMdxSafe(summary)} |");
             }
 
             File.WriteAllText(Path.Combine(outputDir, "index.md"), sb.ToString());
