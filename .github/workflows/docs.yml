@@ -1,0 +1,83 @@
+name: LeichtFrame Docs
+
+on:
+  # 1. Automatically on changes to docs or core code on main
+  push:
+    branches: ["main"]
+    paths:
+      - "website/**"
+      - "src/LeichtFrame.Core/**" # Because XML docs need to be generated
+      - "src/LeichtFrame.IO/**"
+      - "docs/**"
+
+  # 2. Manual trigger (only update docs)
+  workflow_dispatch:
+
+  # 3. Callable by other workflows (e.g. CD)
+  workflow_call:
+    inputs:
+      version_tag:
+        description: "Version context for the deployment message"
+        required: false
+        type: string
+        default: "latest"
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-docs:
+    name: Build & Deploy Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --- Step A: .NET Build for API Reference ---
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build for DocGen
+        # We build Release to ensure the XML files are present
+        run: dotnet build -c Release
+
+      - name: Generate API Docs (Markdown)
+        run: |
+          chmod +x scripts/generate_docs.sh
+          ./scripts/generate_docs.sh
+
+      # --- Step B: Docusaurus Build ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install & Build Website
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      # --- Step C: Deploy ---
+      - name: Determine Commit Message
+        id: msg
+        run: |
+          if [ "${{ inputs.version_tag }}" != "" ] && [ "${{ inputs.version_tag }}" != "latest" ]; then
+             echo "content=Docs: Deploy release ${{ inputs.version_tag }}" >> $GITHUB_OUTPUT
+          else
+             echo "content=Docs: Update from main branch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./website/build
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: ${{ steps.msg.outputs.content }}

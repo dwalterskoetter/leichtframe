@@ -7,11 +7,17 @@ on:
         description: "Version to publish (e.g. 0.1.0)"
         required: true
         default: "0.1.0-alpha"
+  push:
+    tags:
+      - "v*"
 
 jobs:
-  publish:
-    name: Publish to NuGet
+  # JOB 1: NuGet Release
+  nuget-release:
+    name: Publish NuGet
     runs-on: ubuntu-latest
+    env:
+      VERSION: "0.0.0-ci"
 
     steps:
       - name: Checkout code
@@ -22,17 +28,16 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Determine Version
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-            echo "Mode: Manual Release ${{ github.event.inputs.version }}"
-          else
-            # Extract tag version (e.g. v0.1.0 -> 0.1.0)
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
-            echo "Mode: Tag Triggered Release"
-          fi
+      # Find Version
+      - name: Set Version (Manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
 
+      - name: Set Version (Tag)
+        if: github.event_name == 'push'
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      # Build & Push
       - name: Restore
         run: dotnet restore
 
@@ -50,3 +55,18 @@ jobs:
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
+
+    # OUTPUT: We pass the version to the next job
+    outputs:
+      release_version: ${{ env.VERSION }}
+
+  # JOB 2: Docusaurus Update (calls docs.yml)
+  update-docs:
+    needs: nuget-release
+    # Calls the reusable workflow
+    uses: ./.github/workflows/docs.yml
+    with:
+      # We pass the version from Job 1 so the commit message is correct
+      version_tag: ${{ needs.nuget-release.outputs.release_version }}
+    # Important: Inherit secrets (GITHUB_TOKEN)
+    secrets: inherit
