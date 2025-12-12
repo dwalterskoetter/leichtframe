@@ -122,7 +122,7 @@ namespace LeichtFrame.Core
         // --- SIMD Aggregations ---
 
         /// <summary>
-        /// Calculates the sum of the column using SIMD if possible.
+        /// Calculates the sum of the column using SIMD with overflow protection (extends to long).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long Sum()
@@ -130,21 +130,25 @@ namespace LeichtFrame.Core
             var span = Values.Span;
             long sum = 0;
 
-            // SIMD Optimization
-            // Safe for Nullable too, because SetNull(i) sets _data[i] = 0.
             if (Vector.IsHardwareAccelerated && span.Length >= Vector<int>.Count)
             {
-                // Reinterpret cast span<int> -> span<Vector<int>>
                 var vectors = MemoryMarshal.Cast<int, Vector<int>>(span);
-                var accVector = Vector<int>.Zero;
+
+                // We utilize Vector<long> to accumulate sums to prevent 32-bit overflow.
+                var accVectorLow = Vector<long>.Zero;
+                var accVectorHigh = Vector<long>.Zero;
 
                 foreach (var v in vectors)
                 {
-                    accVector += v;
+                    // Widen: Split Vector<int> into two Vector<long>
+                    Vector.Widen(v, out var low, out var high);
+                    accVectorLow += low;
+                    accVectorHigh += high;
                 }
 
-                // Sum the lanes of the accumulator vector
-                sum += Vector.Sum(accVector);
+                // Sum up the lanes of the long accumulators
+                sum += Vector.Sum(accVectorLow);
+                sum += Vector.Sum(accVectorHigh);
 
                 // Handle remaining elements (Tail)
                 int processed = vectors.Length * Vector<int>.Count;
