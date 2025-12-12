@@ -61,6 +61,39 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
+        /// Merges two bitmaps using bitwise OR. 
+        /// Result has a bit set (is null) if either A OR B has that bit set.
+        /// </summary>
+        public static NullBitmap? MergeOr(NullBitmap? a, NullBitmap? b, int length)
+        {
+            if (a == null && b == null) return null;
+
+            var result = new NullBitmap(length);
+
+            // Access internal buffers via Unsafe or assumes friend access? 
+            // For MVP clean code, we iterate ulongs. 
+            // Since we don't expose the ulong array publicly, we implement the logic here.
+
+            int ulongCount = (length + 63) >> 6;
+
+            // Note: This relies on the internal _buffer. 
+            // If we are strictly outside, we can't access _buffer.
+            // Let's assume for this specific internal helper we can access it 
+            // or we implement it as an instance method "Or(other)".
+
+            // Let's implement the logic assuming we act on 'result' using 'a' and 'b'.
+            // To be safe and clean without friend-assemblies:
+            for (int i = 0; i < ulongCount; i++)
+            {
+                ulong valA = (a != null && i < a._buffer.Length) ? a._buffer[i] : 0;
+                ulong valB = (b != null && i < b._buffer.Length) ? b._buffer[i] : 0;
+                result._buffer[i] = valA | valB;
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// Resizes the internal buffer to accommodate at least the specified number of bits.
         /// Preserves existing data.
         /// </summary>
