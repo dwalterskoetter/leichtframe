@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace LeichtFrame.Core
 {
     /// <summary>
@@ -11,32 +7,25 @@ namespace LeichtFrame.Core
     {
         /// <summary>
         /// Joins two DataFrames based on a common key column using a Hash Join algorithm.
+        /// Supports Inner and Left joins.
         /// </summary>
-        /// <param name="left">The left DataFrame (the source of the method call).</param>
-        /// <param name="right">The right DataFrame to join against.</param>
-        /// <param name="on">The name of the column to use as the join key. Must exist in both DataFrames.</param>
-        /// <param name="joinType">The type of join to perform (e.g., Inner). Currently, only <see cref="JoinType.Inner"/> is supported.</param>
-        /// <returns>A new <see cref="DataFrame"/> containing columns from both sources, matched by the key.</returns>
-        /// <exception cref="NotImplementedException">Thrown if <paramref name="joinType"/> is not Inner.</exception>
-        /// <exception cref="NotSupportedException">Thrown if there are column name collisions between the two DataFrames.</exception>
+        /// <param name="left">The left DataFrame.</param>
+        /// <param name="right">The right DataFrame.</param>
+        /// <param name="on">The join key column.</param>
+        /// <param name="joinType">The type of join (Inner or Left).</param>
         public static DataFrame Join(this DataFrame left, DataFrame right, string on, JoinType joinType = JoinType.Inner)
         {
-            if (joinType != JoinType.Inner)
-                throw new NotImplementedException("Only Inner Join is currently supported.");
-
             var leftKeyCol = left[on];
             var rightKeyCol = right[on];
 
             // 1. Build Phase: Create Hash Map from right table
-            // Key: Cell value, Value: List of row indices
+            // Key: Cell value, Value: List of row indices in 'right'
             var hashTable = new Dictionary<object, List<int>>();
-            object nullSentinel = new object(); // Placeholder for null values
+            object nullSentinel = new object();
 
             for (int r = 0; r < right.RowCount; r++)
             {
-                // Get value (handle null safely)
                 object key = rightKeyCol.GetValue(r) ?? nullSentinel;
-
                 if (!hashTable.TryGetValue(key, out var indices))
                 {
                     indices = new List<int>();
@@ -45,9 +34,10 @@ namespace LeichtFrame.Core
                 indices.Add(r);
             }
 
-            // 2. Probe Phase: Scan left table and find matches
-            var leftIndices = new List<int>();
-            var rightIndices = new List<int>();
+            // 2. Probe Phase: Scan left table
+            // We store indices. For Right side, -1 indicates "No Match" (for Left Join).
+            var leftIndices = new List<int>(left.RowCount);
+            var rightIndices = new List<int>(left.RowCount);
 
             for (int l = 0; l < left.RowCount; l++)
             {
@@ -55,41 +45,114 @@ namespace LeichtFrame.Core
 
                 if (hashTable.TryGetValue(key, out var matchingRightIndices))
                 {
-                    // Match found! (Can be 1:N)
+                    // Match(es) found -> Add all combinations (Cartesian product for duplicates)
                     foreach (var rIdx in matchingRightIndices)
                     {
                         leftIndices.Add(l);
                         rightIndices.Add(rIdx);
                     }
                 }
+                else if (joinType == JoinType.Left)
+                {
+                    // No Match -> Preserve Left row, Right is missing (-1)
+                    leftIndices.Add(l);
+                    rightIndices.Add(-1);
+                }
+                // Else (Inner Join): Skip row
             }
 
-            // 3. Materialize Phase: Create new columns
+            // 3. Materialize Phase
             var newColumns = new List<IColumn>();
 
-            // 3a. Copy all left columns (only matching rows)
+            // 3a. Left Columns (Direct Subset)
             foreach (var col in left.Columns)
             {
                 newColumns.Add(col.CloneSubset(leftIndices));
             }
 
-            // 3b. Add right columns
+            // 3b. Right Columns (Handle -1 and enforce Nullability)
             foreach (var col in right.Columns)
             {
-                // Skip the join key column from the right (we already have it from the left)
-                if (col.Name == on) continue;
+                if (col.Name == on) continue; // Skip join key
 
-                // Check for name conflicts (for MVP we throw an error)
                 if (left.Schema.HasColumn(col.Name))
                 {
                     throw new NotSupportedException(
-                        $"Column name collision: '{col.Name}' exists in both DataFrames. Please rename columns before joining.");
+                        $"Column name collision: '{col.Name}' exists in both DataFrames.");
                 }
 
-                newColumns.Add(col.CloneSubset(rightIndices));
+                // If Left Join, right columns MUST be nullable to hold the missing values.
+                bool forceNullable = joinType == JoinType.Left || col.IsNullable;
+
+                // Helper to create the new column with nulls where index is -1
+                IColumn newCol = MaterializeRightColumn(col, rightIndices, forceNullable);
+                newColumns.Add(newCol);
             }
 
             return new DataFrame(newColumns);
+        }
+
+        private static IColumn MaterializeRightColumn(IColumn source, List<int> indices, bool isNullable)
+        {
+            // We use ColumnFactory to create the target column (correctly typed)
+            IColumn newCol = ColumnFactory.Create(source.Name, source.DataType, indices.Count, isNullable);
+
+            // Optimization: Dispatch by type to avoid boxing in the loop
+            if (source is IntColumn ic && newCol is IntColumn nic)
+            {
+                foreach (int idx in indices)
+                {
+                    if (idx == -1) nic.Append(null);
+                    else if (ic.IsNull(idx)) nic.Append(null);
+                    else nic.Append(ic.Get(idx));
+                }
+            }
+            else if (source is DoubleColumn dc && newCol is DoubleColumn ndc)
+            {
+                foreach (int idx in indices)
+                {
+                    if (idx == -1) ndc.Append(null);
+                    else if (dc.IsNull(idx)) ndc.Append(null);
+                    else ndc.Append(dc.Get(idx));
+                }
+            }
+            else if (source is StringColumn sc && newCol is StringColumn nsc)
+            {
+                foreach (int idx in indices)
+                {
+                    if (idx == -1) nsc.Append(null);
+                    else nsc.Append(sc.Get(idx)); // Get handles null internally usually, but IsNull check is safe
+                }
+            }
+            else if (source is BoolColumn bc && newCol is BoolColumn nbc)
+            {
+                foreach (int idx in indices)
+                {
+                    if (idx == -1) nbc.Append(null);
+                    else if (bc.IsNull(idx)) nbc.Append(null);
+                    else nbc.Append(bc.Get(idx));
+                }
+            }
+            else if (source is DateTimeColumn dtc && newCol is DateTimeColumn ndtc)
+            {
+                foreach (int idx in indices)
+                {
+                    if (idx == -1) ndtc.Append(null);
+                    else if (dtc.IsNull(idx)) ndtc.Append(null);
+                    else ndtc.Append(dtc.Get(idx));
+                }
+            }
+            else
+            {
+                // Fallback for unknown types (Boxing)
+                foreach (int idx in indices)
+                {
+                    if (idx == -1) newCol.AppendObject(null);
+                    else newCol.AppendObject(source.GetValue(idx));
+                }
+            }
+
+            return newCol;
         }
     }
 }
