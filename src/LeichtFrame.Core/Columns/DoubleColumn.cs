@@ -1,10 +1,13 @@
 using System.Buffers;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace LeichtFrame.Core
 {
     /// <summary>
     /// A high-performance column for storing <see cref="double"/> values.
-    /// Supports optimized statistical operations like Sum, Min, and Max using contiguous memory.
+    /// Supports optimized statistical operations like Sum, Min, and Max using contiguous memory and SIMD.
     /// </summary>
     public class DoubleColumn : Column<double>, IDisposable
     {
@@ -105,47 +108,86 @@ namespace LeichtFrame.Core
             _nulls?.SetNotNull(index);
         }
 
-        // --- Statistical Helpers ---
+        // --- Statistical Helpers (SIMD Optimized) ---
 
         /// <summary>
-        /// Calculates the sum of all non-null values in the column.
+        /// Calculates the sum of the column. Uses SIMD for non-nullable columns.
         /// </summary>
-        /// <returns>The sum of values.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double Sum()
         {
-            double sum = 0;
-            var span = Values.Span;
-
-            if (_nulls == null)
+            // Optimization: If non-nullable, we can use SIMD and ignore null checks.
+            // If nullable, we cannot blindly use SIMD because NaN + Value = NaN.
+            if (IsNullable)
             {
-                for (int i = 0; i < _length; i++) sum += span[i];
+                return SumNullable();
             }
-            else
+
+            var span = Values.Span;
+            double sum = 0;
+
+            if (Vector.IsHardwareAccelerated && span.Length >= Vector<double>.Count)
             {
-                for (int i = 0; i < _length; i++)
+                var vectors = MemoryMarshal.Cast<double, Vector<double>>(span);
+                var accVector = Vector<double>.Zero;
+
+                foreach (var v in vectors)
                 {
-                    if (!_nulls.IsNull(i)) sum += span[i];
+                    accVector += v;
                 }
+
+                sum += Vector.Sum(accVector);
+
+                int processed = vectors.Length * Vector<double>.Count;
+                span = span.Slice(processed);
+            }
+
+            // Tail loop
+            foreach (var val in span)
+            {
+                sum += val;
+            }
+
+            return sum;
+        }
+
+        private double SumNullable()
+        {
+            double sum = 0;
+            for (int i = 0; i < _length; i++)
+            {
+                if (!IsNull(i)) sum += _data[i];
             }
             return sum;
         }
 
         /// <summary>
-        /// Finds the minimum value in the column. Ignores null values.
-        /// Returns 0 if the column is empty or contains only nulls.
+        /// Finds the minimum value. Optimized for non-nullable.
         /// </summary>
         public double Min()
         {
             if (_length == 0) return 0;
+            if (IsNullable) return MinNullable();
+
+            // Non-Nullable Scalar Optimization (Fastest for Doubles due to NaN checks in SIMD being complex)
+            var span = Values.Span;
+            double min = double.MaxValue;
+            foreach (var val in span)
+            {
+                if (val < min) min = val;
+            }
+            return min;
+        }
+
+        private double MinNullable()
+        {
             double min = double.MaxValue;
             bool hasValue = false;
-            var span = Values.Span;
-
             for (int i = 0; i < _length; i++)
             {
                 if (!IsNull(i))
                 {
-                    double val = span[i];
+                    double val = _data[i];
                     if (val < min) min = val;
                     hasValue = true;
                 }
@@ -154,21 +196,32 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Finds the maximum value in the column. Ignores null values.
-        /// Returns 0 if the column is empty or contains only nulls.
+        /// Finds the maximum value. Optimized for non-nullable.
         /// </summary>
         public double Max()
         {
             if (_length == 0) return 0;
+            if (IsNullable) return MaxNullable();
+
+            // Non-Nullable Scalar Optimization
+            var span = Values.Span;
+            double max = double.MinValue;
+            foreach (var val in span)
+            {
+                if (val > max) max = val;
+            }
+            return max;
+        }
+
+        private double MaxNullable()
+        {
             double max = double.MinValue;
             bool hasValue = false;
-            var span = Values.Span;
-
             for (int i = 0; i < _length; i++)
             {
                 if (!IsNull(i))
                 {
-                    double val = span[i];
+                    double val = _data[i];
                     if (val > max) max = val;
                     hasValue = true;
                 }
