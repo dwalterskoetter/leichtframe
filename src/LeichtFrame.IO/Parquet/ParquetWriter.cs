@@ -124,9 +124,12 @@ namespace LeichtFrame.IO
 
             if (col is StringColumn sc)
             {
-                // String is already a reference type, we can use ToArray
-                // (StringColumn stores nulls directly in the array)
-                return sc.Values.ToArray();
+                var result = new string?[sc.Length];
+                for (int i = 0; i < sc.Length; i++)
+                {
+                    result[i] = sc.Get(i);
+                }
+                return result;
             }
 
             if (col is DateTimeColumn dtc)
