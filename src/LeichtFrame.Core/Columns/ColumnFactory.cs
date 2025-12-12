@@ -17,19 +17,22 @@ namespace LeichtFrame.Core
         /// <exception cref="NotSupportedException">Thrown if the provided type is not supported by LeichtFrame.</exception>
         public static IColumn Create(string name, Type type, int capacity = 16, bool isNullable = false)
         {
-            if (type == typeof(int))
+            // WICHTIG: Nullable Typen auspacken (z.B. int? -> int)
+            Type underlyingType = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (underlyingType == typeof(int))
                 return new IntColumn(name, capacity, isNullable);
 
-            if (type == typeof(double))
+            if (underlyingType == typeof(double))
                 return new DoubleColumn(name, capacity, isNullable);
 
-            if (type == typeof(bool))
+            if (underlyingType == typeof(bool))
                 return new BoolColumn(name, capacity, isNullable);
 
-            if (type == typeof(string))
+            if (underlyingType == typeof(string))
                 return new StringColumn(name, capacity, isNullable);
 
-            if (type == typeof(DateTime))
+            if (underlyingType == typeof(DateTime))
                 return new DateTimeColumn(name, capacity, isNullable);
 
             throw new NotSupportedException($"Type {type.Name} is not supported yet.");
