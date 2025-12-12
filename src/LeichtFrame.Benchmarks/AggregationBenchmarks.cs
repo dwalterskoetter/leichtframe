@@ -3,83 +3,46 @@ using LeichtFrame.Core;
 
 namespace LeichtFrame.Benchmarks
 {
-    [MemoryDiagnoser]
-    public class AggregationBenchmarks
+    public class AggregationBenchmarks : BenchmarkData
     {
-        [Params(1_000_000)]
-        public int N;
-
-        // LeichtFrame Objects
-        private DataFrame _df = null!;
-
-        // LINQ Objects (Poco class to simulate row)
-        private List<SalesRecord> _list = null!;
-
-        private record SalesRecord(int BranchId, int Amount);
-
-        [GlobalSetup]
-        public void Setup()
+        [Benchmark(Baseline = true, Description = "LINQ Sum")]
+        public double Linq_Sum()
         {
-            // 1. Setup LeichtFrame
-            var schema = new DataFrameSchema(new[] {
-                new ColumnDefinition("BranchId", typeof(int)),
-                new ColumnDefinition("Amount", typeof(int))
-            });
-            _df = DataFrame.Create(schema, N);
-            var colBranch = (IntColumn)_df["BranchId"];
-            var colAmount = (IntColumn)_df["Amount"];
-
-            // 2. Setup LINQ
-            _list = new List<SalesRecord>(N);
-
-            var rnd = new Random(42);
-            for (int i = 0; i < N; i++)
-            {
-                int branch = rnd.Next(0, 100); // 100 Groups
-                int amount = rnd.Next(1, 1000);
-
-                colBranch.Append(branch);
-                colAmount.Append(amount);
-
-                _list.Add(new SalesRecord(branch, amount));
-            }
+            return _pocoList.Sum(x => x.Val);
         }
 
-        [GlobalCleanup]
-        public void Cleanup()
+        [Benchmark(Description = "MS DataFrame Sum")]
+        public double MS_Sum()
         {
-            _df.Dispose();
+            return (double)_msFrame["Val"].Sum();
         }
 
-        // --- Scenario 1: Global Sum (Span vs LINQ) ---
-
-        [Benchmark(Baseline = true)]
-        public long Linq_Sum()
+        [Benchmark(Description = "DuckDB Sum")]
+        public double DuckDB_Sum()
         {
-            return _list.Sum(x => (long)x.Amount);
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT SUM(Val) FROM BenchData";
+            return (double)cmd.ExecuteScalar()!;
         }
 
-        [Benchmark]
-        public double LeichtFrame_Sum()
+        [Benchmark(Description = "LeichtFrame Sum")]
+        public double LF_Sum()
         {
-            // Should be super fast because of Span optimization
-            return _df.Sum("Amount");
+            return _lfFrame.Sum("Val");
         }
 
-        // --- Scenario 2: GroupBy + Sum (Dictionary vs LINQ) ---
-
-        [Benchmark]
-        public Dictionary<int, long> Linq_GroupBy_Sum()
+        [Benchmark(Description = "DuckDB Mean")]
+        public double DuckDB_Mean()
         {
-            return _list.GroupBy(x => x.BranchId)
-                        .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.Amount));
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT AVG(Val) FROM BenchData";
+            return (double)cmd.ExecuteScalar()!;
         }
 
-        [Benchmark]
-        public DataFrame LeichtFrame_GroupBy_Sum()
+        [Benchmark(Description = "LeichtFrame Mean")]
+        public double LF_Mean()
         {
-            // Creates GroupedDataFrame -> Aggregates -> New DataFrame
-            return _df.GroupBy("BranchId").Sum("Amount");
+            return _lfFrame.Mean("Val");
         }
     }
 }
