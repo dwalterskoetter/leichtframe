@@ -1,10 +1,11 @@
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Environments; // Neu
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
-using BenchmarkDotNet.Toolchains.InProcess.Emit;
+using BenchmarkDotNet.Toolchains.CsProj; // Neu: Für echte Projekt-Kompilierung
 
 namespace LeichtFrame.Benchmarks
 {
@@ -13,12 +14,14 @@ namespace LeichtFrame.Benchmarks
         public static void Main(string[] args)
         {
             var config = ManualConfig.Create(DefaultConfig.Instance)
-                .AddJob(Job.Default.WithToolchain(InProcessEmitToolchain.Instance))
+                .AddJob(Job.Default
+                    .WithRuntime(CoreRuntime.Core80)
+                    .WithPlatform(Platform.X64)
+                    .WithToolchain(CsProjCoreToolchain.NetCoreApp80)
+                )
 
                 .AddExporter(MarkdownExporter.GitHub)
-
                 .AddLogger(ConsoleLogger.Default)
-
                 .AddColumnProvider(DefaultColumnProviders.Instance);
 
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -28,6 +31,7 @@ namespace LeichtFrame.Benchmarks
             Console.ResetColor();
             Console.WriteLine("Target:  Comparison against LINQ & Microsoft.Data.Analysis");
             Console.WriteLine("Dataset: 1,000,000 Rows (High/Low Cardinality scenarios)");
+            Console.WriteLine("Mode:    High-Precision (CsProj Toolchain / x64)");
             Console.WriteLine();
 
             if (args.Length == 0)

@@ -43,5 +43,11 @@ namespace LeichtFrame.Benchmarks
         {
             return _lfFrame.Where(row => row.Get<int>("Id") < 50_000);
         }
+
+        [Benchmark(Description = "LeichtFrame Where (SIMD)")]
+        public DataFrame LF_WhereVec()
+        {
+            return _lfFrame.WhereVec("Id", CompareOp.LessThan, 50_000);
+        }
     }
 }
