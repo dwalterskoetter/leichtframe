@@ -62,15 +62,13 @@ namespace LeichtFrame.Core.Tests.Columns
         }
 
         [Fact]
-        public void StringColumn_Slice_Works()
+        public void StringColumn_Throws_NotSupported_On_Slice()
         {
             using var col = new StringColumn("Strings", 5);
             col.Append("A");
             col.Append("B");
-            col.Append("C");
 
-            var slice = col.Slice(1, 1);
-            Assert.Equal("B", slice.Span[0]);
+            Assert.Throws<NotSupportedException>(() => col.Slice(0, 1));
         }
     }
 }
