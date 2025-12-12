@@ -1,56 +1,47 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using MDA = Microsoft.Data.Analysis;
 
 namespace LeichtFrame.Benchmarks
 {
-    [MemoryDiagnoser]
-    public class FilterBenchmarks
+    public class FilterBenchmarks : BenchmarkData
     {
-        [Params(1_000_000)]
-        public int N;
+        // Filter: Id < 50_000
 
-        private DataFrame _df = null!;
-        private List<int> _list = null!;
-
-        [GlobalSetup]
-        public void Setup()
+        [Benchmark(Baseline = true, Description = "LINQ Where (ToList)")]
+        [WarmupCount(1)]
+        [IterationCount(5)]
+        public List<TestPoco> Linq_Where()
         {
-            // 1. Setup LeichtFrame
-            var schema = new DataFrameSchema(new[] { new ColumnDefinition("Val", typeof(int)) });
-            _df = DataFrame.Create(schema, N);
-            var col = (IntColumn)_df["Val"];
-
-            // 2. Setup LINQ List
-            _list = new List<int>(N);
-
-            for (int i = 0; i < N; i++)
-            {
-                col.Append(i);
-                _list.Add(i);
-            }
+            return _pocoList.Where(x => x.Id < 50_000).ToList();
         }
 
-        [GlobalCleanup]
-        public void Cleanup()
+        [Benchmark(Description = "MS DataFrame Filter")]
+        [WarmupCount(1)]
+        [IterationCount(5)]
+        public MDA.DataFrame MS_Filter()
         {
-            _df.Dispose();
+            var col = _msFrame.Columns["Id"];
+            var filterMask = col.ElementwiseLessThan(50_000);
+            return _msFrame.Filter(filterMask);
         }
 
-        // Baseline: Standard C# LINQ
-        [Benchmark(Baseline = true)]
-        public List<int> Linq_Where_ToList()
+        [Benchmark(Description = "DuckDB Filter")]
+        public object DuckDB_Filter()
         {
-            // Filter: All values > N/2
-            return _list.Where(x => x > N / 2).ToList();
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT * FROM BenchData WHERE Id < 50000";
+            using var reader = cmd.ExecuteReader();
+
+            int count = 0;
+            while (reader.Read()) count++;
+            return count;
         }
 
-        // Your candidate
-        [Benchmark]
-        public DataFrame LeichtFrame_Where()
+        [Benchmark(Description = "LeichtFrame Where")]
+        public DataFrame LF_Where()
         {
-            // Same filter
-            int threshold = N / 2;
-            return _df.Where(row => row.Get<int>(0) > threshold);
+            return _lfFrame.Where(row => row.Get<int>("Id") < 50_000);
         }
     }
 }

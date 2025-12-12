@@ -1,79 +1,118 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using MDA = Microsoft.Data.Analysis;
 
 namespace LeichtFrame.Benchmarks
 {
-    [MemoryDiagnoser]
-    public class JoinBenchmarks
+    public class JoinBenchmarks : BenchmarkData
     {
-        [Params(100_000)] // We start with 100k, as joins are expensive (for 1M possibly adjust params)
-        public int N;
-
-        // LeichtFrame
-        private DataFrame _dfLeft = null!;
-        private DataFrame _dfRight = null!;
-
-        // LINQ
-        private List<RecordLeft> _listLeft = null!;
-        private List<RecordRight> _listRight = null!;
-
-        // POCOs für LINQ
-        record RecordLeft(int Id, int ValueLeft);
-        record RecordRight(int Id, int ValueRight);
+        private LeichtFrame.Core.DataFrame _lfRight = null!;
+        private MDA.DataFrame _msRight = null!;
+        private List<TestPoco> _linqRight = null!;
 
         [GlobalSetup]
-        public void Setup()
+        public override void GlobalSetup()
         {
-            // 1. Setup LeichtFrame
-            var schemaLeft = new DataFrameSchema(new[] { new ColumnDefinition("Id", typeof(int)), new ColumnDefinition("ValL", typeof(int)) });
-            var schemaRight = new DataFrameSchema(new[] { new ColumnDefinition("Id", typeof(int)), new ColumnDefinition("ValR", typeof(int)) });
+            base.GlobalSetup();
 
-            _dfLeft = DataFrame.Create(schemaLeft, N);
-            _dfRight = DataFrame.Create(schemaRight, N);
+            // ---------------------------------------------------------
+            // SETUP RIGHT SIDE (C# Objects & LeichtFrame & MS)
+            // ---------------------------------------------------------
+            _linqRight = new List<TestPoco>(_pocoList);
 
-            var lId = (IntColumn)_dfLeft["Id"]; var lVal = (IntColumn)_dfLeft["ValL"];
-            var rId = (IntColumn)_dfRight["Id"]; var rVal = (IntColumn)_dfRight["ValR"];
+            // LeichtFrame Schema
+            var schemaRight = new DataFrameSchema(new[] {
+                new ColumnDefinition("UniqueId", typeof(string)),
+                new ColumnDefinition("RightVal", typeof(double))
+            });
 
-            // 2. Setup LINQ
-            _listLeft = new List<RecordLeft>(N);
-            _listRight = new List<RecordRight>(N);
+            _lfRight = DataFrame.Create(schemaRight, N);
+            var colKey = (StringColumn)_lfRight["UniqueId"];
+            var colVal = (DoubleColumn)_lfRight["RightVal"];
 
             for (int i = 0; i < N; i++)
             {
-                // 1:1 Match for maximum stress
-                lId.Append(i); lVal.Append(i * 10);
-                rId.Append(i); rVal.Append(i * 20);
+                colKey.Append(_pocoList[i].UniqueId);
+                colVal.Append(_pocoList[i].Val * 2);
+            }
 
-                _listLeft.Add(new RecordLeft(i, i * 10));
-                _listRight.Add(new RecordRight(i, i * 20));
+            // MS DataFrame
+            var tempIds = new string[N];
+            var tempVals = new double[N];
+            for (int i = 0; i < N; i++)
+            {
+                tempIds[i] = _pocoList[i].UniqueId;
+                tempVals[i] = _pocoList[i].Val * 2;
+            }
+            var msKey = new MDA.StringDataFrameColumn("UniqueId", tempIds);
+            var msVal = new MDA.PrimitiveDataFrameColumn<double>("RightVal", tempVals);
+            _msRight = new MDA.DataFrame(msKey, msVal);
+
+            // ---------------------------------------------------------
+            // SETUP DUCKDB RIGHT SIDE 🦆
+            // ---------------------------------------------------------
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE BenchDataRight (UniqueId VARCHAR, RightVal DOUBLE)";
+            cmd.ExecuteNonQuery();
+
+            using (var appender = _duckConnection.CreateAppender("BenchDataRight"))
+            {
+                for (int i = 0; i < N; i++)
+                {
+                    var row = appender.CreateRow();
+                    row.AppendValue(_pocoList[i].UniqueId);
+                    row.AppendValue(_pocoList[i].Val * 2);
+                    row.EndRow();
+                }
             }
         }
 
         [GlobalCleanup]
-        public void Cleanup()
+        public override void GlobalCleanup()
         {
-            _dfLeft.Dispose();
-            _dfRight.Dispose();
+            base.GlobalCleanup();
+            _lfRight?.Dispose();
         }
 
-        [Benchmark(Baseline = true)]
-        public int Linq_Join()
-        {
-            // Standard LINQ Hash Join
-            var result = _listLeft.Join(_listRight,
-                left => left.Id,
-                right => right.Id,
-                (left, right) => new { left.Id, left.ValueLeft, right.ValueRight })
-                .ToList(); // Materialize!
+        // --- BENCHMARKS ---
 
-            return result.Count;
+        [Benchmark(Baseline = true, Description = "LINQ Join")]
+        [WarmupCount(1)]
+        [IterationCount(3)]
+        public object Linq_Join()
+        {
+            return _pocoList.Join(
+                _linqRight,
+                left => left.UniqueId,
+                right => right.UniqueId,
+                (left, right) => new { L = left.Val, R = right.Val }
+            ).Count();
         }
 
-        [Benchmark]
-        public DataFrame LeichtFrame_Join()
+        [Benchmark(Description = "MS DataFrame Merge")]
+        [WarmupCount(1)]
+        [IterationCount(3)]
+        public object MS_Join()
         {
-            // Unser Hash Join
-            return _dfLeft.Join(_dfRight, on: "Id", JoinType.Inner);
+            return _msFrame.Merge(_msRight, new[] { "UniqueId" }, new[] { "UniqueId" });
+        }
+
+        [Benchmark(Description = "DuckDB Join")]
+        public long DuckDB_Join()
+        {
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT COUNT(*) 
+                FROM BenchData 
+                INNER JOIN BenchDataRight ON BenchData.UniqueId = BenchDataRight.UniqueId";
+
+            return (long)cmd.ExecuteScalar()!;
+        }
+
+        [Benchmark(Description = "LeichtFrame Join")]
+        public DataFrame LF_Join()
+        {
+            return _lfFrame.Join(_lfRight, "UniqueId", JoinType.Inner);
         }
     }
 }

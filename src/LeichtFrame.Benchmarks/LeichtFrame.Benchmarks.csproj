@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.3" />
     <PackageReference Include="Microsoft.Data.Analysis" Version="0.23.0" />
   </ItemGroup>
 
