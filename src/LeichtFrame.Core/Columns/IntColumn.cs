@@ -335,5 +335,80 @@ namespace LeichtFrame.Core
             _nulls?.Dispose();
             _nulls = null;
         }
+
+        // --- Arithmetic Operators ---
+
+        /// <summary>
+        /// Adds two integer columns element-wise.
+        /// </summary>
+        public static IntColumn operator +(IntColumn a, IntColumn b) => ExecuteOp(a, b, VectorizedMathOps.MathOp.Add);
+
+        /// <summary>
+        /// Subtracts the second integer column from the first element-wise.
+        /// </summary>
+        public static IntColumn operator -(IntColumn a, IntColumn b) => ExecuteOp(a, b, VectorizedMathOps.MathOp.Subtract);
+
+        /// <summary>
+        /// Multiplies two integer columns element-wise.
+        /// </summary>
+        public static IntColumn operator *(IntColumn a, IntColumn b) => ExecuteOp(a, b, VectorizedMathOps.MathOp.Multiply);
+
+        /// <summary>
+        /// Divides the first integer column by the second element-wise.
+        /// </summary>
+        public static IntColumn operator /(IntColumn a, IntColumn b) => ExecuteOp(a, b, VectorizedMathOps.MathOp.Divide);
+
+        /// <summary>
+        /// Adds a scalar value to every element in the column.
+        /// </summary>
+        public static IntColumn operator +(IntColumn a, int b) => ExecuteOpScalar(a, b, VectorizedMathOps.MathOp.Add);
+
+        /// <summary>
+        /// Subtracts a scalar value from every element in the column.
+        /// </summary>
+        public static IntColumn operator -(IntColumn a, int b) => ExecuteOpScalar(a, b, VectorizedMathOps.MathOp.Subtract);
+
+        /// <summary>
+        /// Multiplies every element in the column by a scalar value.
+        /// </summary>
+        public static IntColumn operator *(IntColumn a, int b) => ExecuteOpScalar(a, b, VectorizedMathOps.MathOp.Multiply);
+
+        /// <summary>
+        /// Divides every element in the column by a scalar value.
+        /// </summary>
+        public static IntColumn operator /(IntColumn a, int b) => ExecuteOpScalar(a, b, VectorizedMathOps.MathOp.Divide);
+
+        private static IntColumn ExecuteOp(IntColumn a, IntColumn b, VectorizedMathOps.MathOp op)
+        {
+            if (a.Length != b.Length) throw new ArgumentException("Column lengths mismatch");
+
+            bool resultNullable = a.IsNullable || b.IsNullable;
+            var result = new IntColumn($"{a.Name}_op_{b.Name}", a.Length, resultNullable);
+
+            result._length = a.Length;
+            VectorizedMathOps.Calculate<int>(a._data.AsSpan(0, a.Length), b._data.AsSpan(0, b.Length), result._data.AsSpan(0, a.Length), op);
+
+            if (resultNullable)
+            {
+                result._nulls?.Dispose();
+                result._nulls = NullBitmap.MergeOr(a._nulls, b._nulls, a.Length);
+            }
+            return result;
+        }
+
+        private static IntColumn ExecuteOpScalar(IntColumn a, int scalar, VectorizedMathOps.MathOp op)
+        {
+            var result = new IntColumn($"{a.Name}_op_scalar", a.Length, a.IsNullable);
+            result._length = a.Length;
+
+            VectorizedMathOps.CalculateScalar<int>(a._data.AsSpan(0, a.Length), scalar, result._data.AsSpan(0, a.Length), op);
+
+            if (a.IsNullable && a._nulls != null)
+            {
+                result._nulls?.Dispose();
+                result._nulls = NullBitmap.MergeOr(a._nulls, null, a.Length);
+            }
+            return result;
+        }
     }
 }
