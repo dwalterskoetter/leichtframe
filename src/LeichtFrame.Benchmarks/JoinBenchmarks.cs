@@ -1,14 +1,11 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
-using MDA = Microsoft.Data.Analysis;
 
 namespace LeichtFrame.Benchmarks
 {
     public class JoinBenchmarks : BenchmarkData
     {
         private LeichtFrame.Core.DataFrame _lfRight = null!;
-        private MDA.DataFrame _msRight = null!;
-        private List<TestPoco> _linqRight = null!;
 
         [GlobalSetup]
         public override void GlobalSetup()
@@ -16,17 +13,16 @@ namespace LeichtFrame.Benchmarks
             base.GlobalSetup();
 
             // ---------------------------------------------------------
-            // SETUP RIGHT SIDE (C# Objects & LeichtFrame & MS)
+            // SETUP LEICHTFRAME RIGHT SIDE
             // ---------------------------------------------------------
-            _linqRight = new List<TestPoco>(_pocoList);
 
-            // LeichtFrame Schema
             var schemaRight = new DataFrameSchema(new[] {
                 new ColumnDefinition("UniqueId", typeof(string)),
                 new ColumnDefinition("RightVal", typeof(double))
             });
 
             _lfRight = DataFrame.Create(schemaRight, N);
+
             var colKey = (StringColumn)_lfRight["UniqueId"];
             var colVal = (DoubleColumn)_lfRight["RightVal"];
 
@@ -35,18 +31,6 @@ namespace LeichtFrame.Benchmarks
                 colKey.Append(_pocoList[i].UniqueId);
                 colVal.Append(_pocoList[i].Val * 2);
             }
-
-            // MS DataFrame
-            var tempIds = new string[N];
-            var tempVals = new double[N];
-            for (int i = 0; i < N; i++)
-            {
-                tempIds[i] = _pocoList[i].UniqueId;
-                tempVals[i] = _pocoList[i].Val * 2;
-            }
-            var msKey = new MDA.StringDataFrameColumn("UniqueId", tempIds);
-            var msVal = new MDA.PrimitiveDataFrameColumn<double>("RightVal", tempVals);
-            _msRight = new MDA.DataFrame(msKey, msVal);
 
             // ---------------------------------------------------------
             // SETUP DUCKDB RIGHT SIDE 🦆
@@ -70,37 +54,17 @@ namespace LeichtFrame.Benchmarks
         [GlobalCleanup]
         public override void GlobalCleanup()
         {
-            base.GlobalCleanup();
             _lfRight?.Dispose();
+            base.GlobalCleanup();
         }
 
         // --- BENCHMARKS ---
 
-        [Benchmark(Baseline = true, Description = "LINQ Join")]
-        [WarmupCount(1)]
-        [IterationCount(3)]
-        public object Linq_Join()
-        {
-            return _pocoList.Join(
-                _linqRight,
-                left => left.UniqueId,
-                right => right.UniqueId,
-                (left, right) => new { L = left.Val, R = right.Val }
-            ).Count();
-        }
-
-        [Benchmark(Description = "MS DataFrame Merge")]
-        [WarmupCount(1)]
-        [IterationCount(3)]
-        public object MS_Join()
-        {
-            return _msFrame.Merge(_msRight, new[] { "UniqueId" }, new[] { "UniqueId" });
-        }
-
-        [Benchmark(Description = "DuckDB Join")]
+        [Benchmark(Baseline = true, Description = "DuckDB Join (Count)")]
         public long DuckDB_Join()
         {
             using var cmd = _duckConnection.CreateCommand();
+
             cmd.CommandText = @"
                 SELECT COUNT(*) 
                 FROM BenchData 

@@ -1,19 +1,25 @@
 using LeichtFrame.Core;
 using Parquet.Schema;
+using Parquet;
 
 namespace LeichtFrame.IO
 {
     /// <summary>
     /// Provides high-performance methods to read Apache Parquet files into a <see cref="DataFrame"/>.
     /// Automatically maps Parquet schema types to LeichtFrame column types.
+    /// Supports both full-load and batched streaming (RowGroup-based).
     /// </summary>
     public static class ParquetReader
     {
+        // =======================================================================
+        // STANDARD READ METHODS (Full Load)
+        // =======================================================================
+
         /// <summary>
         /// Reads a Parquet file from the specified file path.
         /// </summary>
         /// <param name="path">The full path to the Parquet file.</param>
-        /// <returns>A populated <see cref="DataFrame"/> containing the data.</returns>
+        /// <returns>A populated <see cref="DataFrame"/> containing all data.</returns>
         public static DataFrame Read(string path)
         {
             using var stream = File.OpenRead(path);
@@ -46,10 +52,10 @@ namespace LeichtFrame.IO
             var colDefs = dataFields.Select(f => MapToColumnDefinition(f));
             var schema = new DataFrameSchema(colDefs);
 
-            // 2. Create DataFrame (RowCount is known in metadata header!)
-            // Parquet stores rows per RowGroup. We sum or take capacity.
-            // For simplicity, we start empty and let Append work.
-            var df = DataFrame.Create(schema, capacity: 1000); // Tuning option for later
+            // 2. Create DataFrame
+            // We start with a capacity estimate. Parquet has metadata for total rows, but reader.ThriftMetadata might be internal.
+            // Safe default.
+            var df = DataFrame.Create(schema, capacity: 1000);
 
             // 3. Read Data (RowGroup by RowGroup)
             for (int i = 0; i < reader.RowGroupCount; i++)
@@ -71,6 +77,75 @@ namespace LeichtFrame.IO
             return df;
         }
 
+        // =======================================================================
+        // BATCHED READ METHODS (Streaming)
+        // =======================================================================
+
+        /// <summary>
+        /// Reads a Parquet file in batches, mapping 1 Parquet RowGroup to 1 DataFrame.
+        /// This allows processing files larger than available memory.
+        /// </summary>
+        /// <param name="path">The file path.</param>
+        /// <returns>An enumerable of DataFrames.</returns>
+        public static IEnumerable<DataFrame> ReadBatches(string path)
+        {
+            using var stream = File.OpenRead(path);
+            foreach (var batch in ReadBatches(stream))
+            {
+                yield return batch;
+            }
+        }
+
+        /// <summary>
+        /// Reads Parquet batches from a stream synchronously.
+        /// Note: This performs blocking calls on the underlying async Parquet library.
+        /// </summary>
+        /// <param name="stream">The input stream.</param>
+        /// <returns>An enumerable of DataFrames.</returns>
+        public static IEnumerable<DataFrame> ReadBatches(Stream stream)
+        {
+            // 1. Open Reader (Blocking wait)
+            var task = Parquet.ParquetReader.CreateAsync(stream);
+            task.Wait();
+            using var reader = task.Result;
+
+            // 2. Schema Mapping
+            var dataFields = reader.Schema.GetDataFields();
+            var colDefs = dataFields.Select(f => MapToColumnDefinition(f));
+            var schema = new DataFrameSchema(colDefs);
+
+            // 3. Iterate RowGroups
+            for (int i = 0; i < reader.RowGroupCount; i++)
+            {
+                using var groupReader = reader.OpenRowGroupReader(i);
+
+                // If RowGroup is empty, we skip or produce empty DF. Parquet usually doesn't store empty groups.
+                long groupRowCount = groupReader.RowCount;
+
+                // Create a fresh DataFrame for this batch
+                var batchDf = DataFrame.Create(schema, (int)groupRowCount);
+
+                // Read all columns for this group
+                foreach (var field in dataFields)
+                {
+                    var column = batchDf[field.Name];
+
+                    // Read Column Data (Blocking wait)
+                    var readTask = groupReader.ReadColumnAsync(field);
+                    readTask.Wait();
+                    var parquetColumn = readTask.Result;
+
+                    AppendData(column, parquetColumn.Data);
+                }
+
+                yield return batchDf;
+            }
+        }
+
+        // =======================================================================
+        // INTERNAL HELPERS
+        // =======================================================================
+
         private static ColumnDefinition MapToColumnDefinition(DataField field)
         {
             // Mapping Parquet Types -> .NET Types
@@ -85,8 +160,7 @@ namespace LeichtFrame.IO
                 coreType != typeof(string) && coreType != typeof(bool) &&
                 coreType != typeof(DateTime))
             {
-                // Fallback or Error? Parquet has many types (Decimal, Float...).
-                // MVP: We throw an error for unsupported types.
+                // Fallback for types not strictly typed in our system
                 throw new NotSupportedException($"Parquet type '{coreType.Name}' for column '{field.Name}' is not supported yet.");
             }
 
@@ -97,8 +171,6 @@ namespace LeichtFrame.IO
         {
             // The array from Parquet.Net is typed (e.g., int[] or int?[])
             // We iterate and append.
-            // Performance note: In phase 2, we could use low-level Array.Copy here,
-            // if the types match exactly (zero-copy or bulk-copy).
 
             if (col is IntColumn ic)
             {

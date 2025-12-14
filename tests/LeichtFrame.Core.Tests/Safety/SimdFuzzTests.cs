@@ -1,5 +1,4 @@
 using LeichtFrame.Core;
-using System.Numerics;
 
 namespace LeichtFrame.Core.Tests.Safety
 {

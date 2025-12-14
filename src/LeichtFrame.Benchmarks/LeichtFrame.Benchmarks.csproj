@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LeichtFrame.Core\LeichtFrame.Core.csproj" />
+    <ProjectReference Include="..\LeichtFrame.IO\LeichtFrame.IO.csproj" />
   </ItemGroup>
 
 </Project>

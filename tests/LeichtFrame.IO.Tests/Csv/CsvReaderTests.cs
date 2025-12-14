@@ -135,5 +135,90 @@ namespace LeichtFrame.IO.Tests
             Assert.Equal("Laptop", df["Name"].Get<string>(0));
             Assert.Equal(999.99, df["Price"].Get<double>(0));
         }
+
+        [Fact]
+        public void ReadBatches_Splits_Data_Correctly()
+        {
+            // Arrange: Create CSV with 10 rows
+            var sb = new StringBuilder();
+            sb.AppendLine("Id,Val");
+            for (int i = 0; i < 10; i++)
+            {
+                sb.AppendLine($"{i},{i * 10}");
+            }
+
+            string tempFile = Path.GetTempFileName();
+            File.WriteAllText(tempFile, sb.ToString());
+
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Val", typeof(int))
+            });
+
+            try
+            {
+                // Act: Read in batches of size 3
+                // Expectation: 4 Batches (3, 3, 3, 1 rows)
+                var batches = CsvReader.ReadBatches(tempFile, schema, batchSize: 3).ToList();
+
+                // Assert
+                Assert.Equal(4, batches.Count);
+
+                // Verify Batch 1
+                Assert.Equal(3, batches[0].RowCount);
+                Assert.Equal(0, batches[0]["Id"].Get<int>(0));
+                Assert.Equal(2, batches[0]["Id"].Get<int>(2));
+
+                // Verify Batch 4 (Last one containing remainder)
+                Assert.Equal(1, batches[3].RowCount);
+                Assert.Equal(9, batches[3]["Id"].Get<int>(0));
+            }
+            finally
+            {
+                if (File.Exists(tempFile)) File.Delete(tempFile);
+            }
+        }
+
+        [Fact]
+        public void Read_Process_Large_File_Correctly_Using_Parallel_Logic()
+        {
+            // The logic switches to Parallel processing if chunk size (50k) is reached.
+            // We generate 55,000 rows to force at least one chunk + remainder.
+            int rows = 55_000;
+            var sb = new StringBuilder();
+            sb.AppendLine("Id,Value");
+            for (int i = 0; i < rows; i++)
+            {
+                sb.AppendLine($"{i},{i * 0.5}");
+            }
+
+            string path = Path.GetTempFileName();
+            File.WriteAllText(path, sb.ToString());
+
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Value", typeof(double))
+            });
+
+            try
+            {
+                // Act: This will internally use ProcessChunkParallel
+                var df = CsvReader.Read(path, schema);
+
+                // Assert
+                Assert.Equal(rows, df.RowCount);
+
+                // Spot check first, boundary, last
+                Assert.Equal(0, df["Id"].Get<int>(0));
+                Assert.Equal(50_000, df["Id"].Get<int>(50_000));
+                Assert.Equal(54_999, df["Id"].Get<int>(54_999));
+
+                Assert.Equal(0.0, df["Value"].Get<double>(0));
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
     }
 }

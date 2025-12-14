@@ -1,7 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 using LeichtFrame.Core;
-using MDA = Microsoft.Data.Analysis;
 using DuckDB.NET.Data;
 
 namespace LeichtFrame.Benchmarks
@@ -15,23 +14,18 @@ namespace LeichtFrame.Benchmarks
         public int N;
 
         protected LeichtFrame.Core.DataFrame _lfFrame = null!;
-        protected MDA.DataFrame _msFrame = null!;
-        protected List<TestPoco> _pocoList = null!;
         protected DuckDBConnection _duckConnection = null!;
+
+        protected List<TestPoco> _pocoList = null!;
+
         public record TestPoco(int Id, double Val, string Category, string UniqueId);
 
         [GlobalSetup]
         public virtual void GlobalSetup()
         {
             var rnd = new Random(42);
-
             _pocoList = new List<TestPoco>(N);
             var categories = new[] { "A", "B", "C", "D", "E" };
-
-            var dataInt = new int[N];
-            var dataDbl = new double[N];
-            var dataCat = new string[N];
-            var dataUid = new string[N];
 
             for (int i = 0; i < N; i++)
             {
@@ -41,22 +35,12 @@ namespace LeichtFrame.Benchmarks
                 string uid = Guid.NewGuid().ToString();
 
                 _pocoList.Add(new TestPoco(id, val, cat, uid));
-
-                dataInt[i] = id; dataDbl[i] = val; dataCat[i] = cat; dataUid[i] = uid;
             }
 
             // --- 1. Setup LeichtFrame ---
             _lfFrame = DataFrame.FromObjects(_pocoList);
 
-            // --- 2. Setup Microsoft.Data.Analysis ---
-            var msInt = new MDA.PrimitiveDataFrameColumn<int>("Id", dataInt);
-            var msDbl = new MDA.PrimitiveDataFrameColumn<double>("Val", dataDbl);
-            var msCat = new MDA.StringDataFrameColumn("Category", dataCat);
-            var msId = new MDA.StringDataFrameColumn("UniqueId", dataUid);
-
-            _msFrame = new MDA.DataFrame(msInt, msDbl, msCat, msId);
-
-            // --- 3. Setup DuckDB 🦆 ---
+            // --- 2. Setup DuckDB 🦆 ---
             _duckConnection = new DuckDBConnection("DataSource=:memory:");
             _duckConnection.Open();
 
