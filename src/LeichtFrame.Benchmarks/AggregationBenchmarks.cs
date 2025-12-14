@@ -5,19 +5,9 @@ namespace LeichtFrame.Benchmarks
 {
     public class AggregationBenchmarks : BenchmarkData
     {
-        [Benchmark(Baseline = true, Description = "LINQ Sum")]
-        public double Linq_Sum()
-        {
-            return _pocoList.Sum(x => x.Val);
-        }
+        // --- SUM ---
 
-        [Benchmark(Description = "MS DataFrame Sum")]
-        public double MS_Sum()
-        {
-            return (double)_msFrame["Val"].Sum();
-        }
-
-        [Benchmark(Description = "DuckDB Sum")]
+        [Benchmark(Baseline = true, Description = "DuckDB Sum")]
         public double DuckDB_Sum()
         {
             using var cmd = _duckConnection.CreateCommand();
@@ -30,6 +20,8 @@ namespace LeichtFrame.Benchmarks
         {
             return _lfFrame.Sum("Val");
         }
+
+        // --- MEAN ---
 
         [Benchmark(Description = "DuckDB Mean")]
         public double DuckDB_Mean()

@@ -65,5 +65,54 @@ namespace LeichtFrame.IO.Tests
                 File.Delete(path);
             }
         }
+
+        [Fact]
+        public async Task ReadBatches_Splits_RowGroups_Correctly()
+        {
+            // Arrange: Create a Parquet file with 2 distinct RowGroups
+            string path = Path.GetTempFileName();
+            var schema = new ParquetSchema(new DataField<int>("Id"));
+
+            using (var stream = File.OpenWrite(path))
+            {
+                using var writer = await Parquet.ParquetWriter.CreateAsync(schema, stream);
+
+                // RowGroup 1: IDs 1, 2
+                using (var gw1 = writer.CreateRowGroup())
+                {
+                    await gw1.WriteColumnAsync(new DataColumn(schema.DataFields[0], new int[] { 1, 2 }));
+                }
+
+                // RowGroup 2: IDs 3, 4, 5
+                using (var gw2 = writer.CreateRowGroup())
+                {
+                    await gw2.WriteColumnAsync(new DataColumn(schema.DataFields[0], new int[] { 3, 4, 5 }));
+                }
+            }
+
+            try
+            {
+                // Act
+                // ReadBatches returns IEnumerable<DataFrame>
+                var batches = ParquetReader.ReadBatches(path).ToList();
+
+                // Assert
+                Assert.Equal(2, batches.Count);
+
+                // Check Batch 1
+                Assert.Equal(2, batches[0].RowCount);
+                Assert.Equal(1, batches[0]["Id"].Get<int>(0));
+                Assert.Equal(2, batches[0]["Id"].Get<int>(1));
+
+                // Check Batch 2
+                Assert.Equal(3, batches[1].RowCount);
+                Assert.Equal(3, batches[1]["Id"].Get<int>(0));
+                Assert.Equal(5, batches[1]["Id"].Get<int>(2));
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
     }
 }

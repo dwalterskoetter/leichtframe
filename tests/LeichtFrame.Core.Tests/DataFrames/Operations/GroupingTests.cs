@@ -149,5 +149,119 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
 
             Assert.Equal(15.0, result["Sum_V"].Get<double>(0));
         }
+
+        [Fact]
+        public void GroupBy_Parallel_Path_Works_Correctly_With_Large_Data()
+        {
+            // Arrange: Generate enough rows to trigger Parallel Path (> 100,000)
+            int rowCount = 150_000;
+            int distinctGroups = 10;
+
+            using var col = new IntColumn("Val", rowCount);
+
+            // Generate data: 0, 1, 2... 9, 0, 1...
+            for (int i = 0; i < rowCount; i++)
+            {
+                col.Append(i % distinctGroups);
+            }
+
+            var df = new DataFrame(new[] { col });
+
+            // Act
+            // This implicitly calls GroupByParallel because RowCount >= 100_000
+            var grouped = df.GroupBy("Val");
+            var result = grouped.Count();
+
+            // Assert
+            Assert.Equal(distinctGroups, result.RowCount);
+
+            // Each group should have exactly (150,000 / 10) = 15,000 items
+            int expectedCount = rowCount / distinctGroups;
+
+            // Check a few groups
+            var countCol = (IntColumn)result["Count"];
+            var keyCol = (IntColumn)result["Val"];
+
+            // Since HashMaps don't guarantee order, we iterate or look up
+            for (int i = 0; i < result.RowCount; i++)
+            {
+                Assert.Equal(expectedCount, countCol.Get(i));
+
+                int key = keyCol.Get(i);
+                Assert.True(key >= 0 && key < distinctGroups);
+            }
+        }
+
+        [Fact]
+        public void Group_MinMaxMean_Works_Correctly()
+        {
+            // Arrange
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Group", typeof(string)),
+                new ColumnDefinition("Val", typeof(double))
+            });
+            var df = DataFrame.Create(schema, 10);
+            var g = (StringColumn)df["Group"];
+            var v = (DoubleColumn)df["Val"];
+
+            // Group A: 10, 20, 30 -> Min: 10, Max: 30, Mean: 20, Sum: 60
+            g.Append("A"); v.Append(10.0);
+            g.Append("A"); v.Append(20.0);
+            g.Append("A"); v.Append(30.0);
+
+            // Group B: 5, 5 -> Min: 5, Max: 5, Mean: 5, Sum: 10
+            g.Append("B"); v.Append(5.0);
+            g.Append("B"); v.Append(5.0);
+
+            var gdf = df.GroupBy("Group");
+
+            // Act & Assert (Min)
+            var minDf = gdf.Min("Val");
+            var rowA_Min = minDf.Where(r => r.Get<string>("Group") == "A");
+            Assert.Equal(10.0, rowA_Min["Min_Val"].Get<double>(0));
+
+            // Act & Assert (Max)
+            var maxDf = gdf.Max("Val");
+            var rowA_Max = maxDf.Where(r => r.Get<string>("Group") == "A");
+            Assert.Equal(30.0, rowA_Max["Max_Val"].Get<double>(0));
+
+            // Act & Assert (Mean)
+            var meanDf = gdf.Mean("Val");
+            var rowA_Mean = meanDf.Where(r => r.Get<string>("Group") == "A");
+            Assert.Equal(20.0, rowA_Mean["Mean_Val"].Get<double>(0));
+
+            var rowB_Mean = meanDf.Where(r => r.Get<string>("Group") == "B");
+            Assert.Equal(5.0, rowB_Mean["Mean_Val"].Get<double>(0));
+        }
+
+        [Fact]
+        public void Group_Aggregations_Ignore_Nulls()
+        {
+            var df = DataFrame.Create(new DataFrameSchema(new[] {
+                new ColumnDefinition("Id", typeof(int)),
+                new ColumnDefinition("Val", typeof(int), IsNullable: true)
+            }), 5);
+
+            var id = (IntColumn)df["Id"];
+            var val = (IntColumn)df["Val"];
+
+            // Group 1: 10, null, 20 -> Sum: 30, Count: 3 (rows) or 2 (values)?
+            // Count() counts rows in group. 
+            // Mean() should be 30 / 2 = 15.
+
+            id.Append(1); val.Append(10);
+            id.Append(1); val.Append(null);
+            id.Append(1); val.Append(20);
+
+            var gdf = df.GroupBy("Id");
+
+            // Test Sum
+            var sumDf = gdf.Sum("Val");
+            Assert.Equal(30.0, sumDf["Sum_Val"].Get<double>(0));
+
+            // Test Mean
+            var meanDf = gdf.Mean("Val");
+            Assert.Equal(15.0, meanDf["Mean_Val"].Get<double>(0));
+        }
     }
 }
