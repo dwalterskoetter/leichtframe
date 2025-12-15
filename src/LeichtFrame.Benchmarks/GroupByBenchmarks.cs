@@ -133,5 +133,28 @@ namespace LeichtFrame.Benchmarks
         {
             return _lfFrame.GroupBy("Category").Max("Val");
         }
+
+        // =========================================================
+        // STRING GROUPBY
+        // =========================================================
+
+        [Benchmark(Description = "DuckDB GroupBy String")]
+        public long DuckDB_String()
+        {
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT UniqueId, COUNT(*) FROM BenchData GROUP BY UniqueId";
+            using var reader = cmd.ExecuteReader();
+
+            long count = 0;
+            while (reader.Read()) count++;
+            return count;
+        }
+
+        [Benchmark(Description = "LeichtFrame GroupBy String (Parallel)")]
+        public DataFrame LF_String()
+        {
+            // Das triggert jetzt den neuen GroupByStringParallel Pfad (da N >= 100k)
+            return _lfFrame.GroupBy("UniqueId").Count();
+        }
     }
 }

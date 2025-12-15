@@ -25,6 +25,9 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Initializes a new instance of the <see cref="GroupedDataFrame"/> class.
         /// </summary>
+        /// <param name="source">The source DataFrame.</param>
+        /// <param name="groupColName">The name of the grouping column.</param>
+        /// <param name="nullIndices">Optional array of row indices belonging to the null group.</param>
         protected GroupedDataFrame(DataFrame source, string groupColName, int[]? nullIndices)
         {
             Source = source;
@@ -32,7 +35,7 @@ namespace LeichtFrame.Core
             NullGroupIndices = nullIndices;
         }
 
-        // --- Public Accessors for Aggregation Engines (Changed from Internal to Public) ---
+        // --- Public Accessors for Aggregation Engines ---
 
         /// <summary>
         /// Gets the number of unique groups found (excluding the null group).

@@ -9,7 +9,6 @@ namespace LeichtFrame.Core.Internal
         private int _count;
         private int _freeList;
 
-        // Group Management
         private int[] _groupHeads;
         private int[] _groupTails;
         private int[] _groupCounts;
@@ -52,25 +51,11 @@ namespace LeichtFrame.Core.Internal
             int groupIndex = GetOrAddGroup(key);
 
             int tail = _groupTails[groupIndex];
+            if (tail == -1) _groupHeads[groupIndex] = rowIndex;
+            else RowNext[tail] = rowIndex;
 
-            if (tail == -1)
-            {
-                // First item in group
-                _groupHeads[groupIndex] = rowIndex;
-            }
-            else
-            {
-                // Link previous tail to new row
-                RowNext[tail] = rowIndex;
-            }
-
-            // Update Tail to new row
             _groupTails[groupIndex] = rowIndex;
-
-            // Mark new row as end of list
             RowNext[rowIndex] = -1;
-
-            // Track count
             _groupCounts[groupIndex]++;
         }
 
@@ -82,25 +67,14 @@ namespace LeichtFrame.Core.Internal
 
             for (int i = _buckets[bucket]; i >= 0; i = _entries[i].Next)
             {
-                if (_entries[i].HashCode == hashCode && _entries[i].Key.Equals(key))
-                {
-                    return i;
-                }
+                if (_entries[i].HashCode == hashCode && _entries[i].Key.Equals(key)) return i;
             }
 
             int index;
-            if (_freeList >= 0)
-            {
-                index = _freeList;
-                _freeList = _entries[index].Next;
-            }
+            if (_freeList >= 0) { index = _freeList; _freeList = _entries[index].Next; }
             else
             {
-                if (_count == _entries.Length)
-                {
-                    Resize();
-                    bucket = hashCode % _buckets.Length;
-                }
+                if (_count == _entries.Length) { Resize(); bucket = hashCode % _buckets.Length; }
                 index = _count;
                 _count++;
             }
@@ -119,71 +93,49 @@ namespace LeichtFrame.Core.Internal
             int newSize = GetPrime(_count * 2);
             int[] newBuckets = new int[newSize];
             Array.Fill(newBuckets, -1);
-
             Entry[] newEntries = new Entry[newSize];
             Array.Copy(_entries, newEntries, _count);
 
             for (int i = 0; i < _count; i++)
             {
-                if (newEntries[i].HashCode >= 0)
-                {
-                    int bucket = newEntries[i].HashCode % newSize;
-                    newEntries[i].Next = newBuckets[bucket];
-                    newBuckets[bucket] = i;
-                }
+                int bucket = newEntries[i].HashCode % newSize;
+                newEntries[i].Next = newBuckets[bucket];
+                newBuckets[bucket] = i;
             }
-
             _buckets = newBuckets;
             _entries = newEntries;
 
-            // Resize Group Aux Arrays
             Array.Resize(ref _groupHeads, newSize);
-            // New slots must be -1
             for (int i = _count; i < newSize; i++) _groupHeads[i] = -1;
-
             Array.Resize(ref _groupTails, newSize);
             for (int i = _count; i < newSize; i++) _groupTails[i] = -1;
-
             Array.Resize(ref _groupCounts, newSize);
         }
 
-        /// <summary>
-        /// Exports the data in CSR (Compressed Sparse Row) format.
-        /// Zero boxing, minimal allocation (3 arrays total).
-        /// </summary>
         public (T[] Keys, int[] GroupOffsets, int[] RowIndices) ToCSR()
         {
             var keys = new T[_count];
             var offsets = new int[_count + 1];
-
             int totalRows = 0;
             for (int i = 0; i < _count; i++) totalRows += _groupCounts[i];
 
             var indices = new int[totalRows];
-
             int currentOffset = 0;
 
             for (int i = 0; i < _count; i++)
             {
                 keys[i] = _entries[i].Key;
-
                 offsets[i] = currentOffset;
-
                 int rowIdx = _groupHeads[i];
-                int end = currentOffset + _groupCounts[i];
-
                 int ptr = currentOffset;
                 while (rowIdx != -1)
                 {
                     indices[ptr++] = rowIdx;
                     rowIdx = RowNext[rowIdx];
                 }
-
                 currentOffset += _groupCounts[i];
             }
-
             offsets[_count] = currentOffset;
-
             return (keys, offsets, indices);
         }
 
@@ -196,12 +148,7 @@ namespace LeichtFrame.Core.Internal
 
         public void Dispose()
         {
-            _buckets = null!;
-            _entries = null!;
-            _groupHeads = null!;
-            _groupTails = null!;
-            _groupCounts = null!;
-            RowNext = null!;
+            _buckets = null!; _entries = null!; _groupHeads = null!; _groupTails = null!; _groupCounts = null!; RowNext = null!;
         }
     }
 }

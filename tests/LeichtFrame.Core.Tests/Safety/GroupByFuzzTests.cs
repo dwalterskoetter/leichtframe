@@ -56,5 +56,55 @@ namespace LeichtFrame.Core.Tests.Safety
                 }
             }
         }
+
+        [Fact]
+        public void Fuzz_Radix_Int_Against_LINQ()
+        {
+            int[] sizes = { 0, 1, 100, 10_000, 100_000, 300_000 };
+            var rnd = new Random(999);
+
+            foreach (var size in sizes)
+            {
+                // 1. Setup Data
+                int[] data = new int[size];
+                for (int i = 0; i < size; i++)
+                {
+                    data[i] = rnd.Next(0, Math.Max(1, size / 5));
+                }
+
+                using var col = new IntColumn("Id", size);
+                foreach (var val in data) col.Append(val);
+
+                var df = new DataFrame(new[] { col });
+
+                // 2. Act: GOD MODE (Parallel Radix).
+                var radixResult = df.GroupByRadix("Id").Count();
+
+                // 3. Oracle: LINQ (Truth)
+                var linqResult = data
+                    .GroupBy(x => x)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                // 4. Assert
+                Assert.Equal(linqResult.Count, radixResult.RowCount);
+
+                if (size > 0)
+                {
+                    var keyCol = (IntColumn)radixResult["Id"];
+                    var countCol = (IntColumn)radixResult["Count"];
+
+                    Assert.Equal(size, countCol.Sum());
+
+                    for (int i = 0; i < radixResult.RowCount; i++)
+                    {
+                        int key = keyCol.Get(i);
+                        int count = countCol.Get(i);
+
+                        Assert.True(linqResult.ContainsKey(key), $"Radix found key {key} which LINQ missed (Size: {size})");
+                        Assert.Equal(linqResult[key], count);
+                    }
+                }
+            }
+        }
     }
 }

@@ -1,47 +1,36 @@
 using System.Collections.Concurrent;
-using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using LeichtFrame.Core.Internal;
 
 namespace LeichtFrame.Core
 {
     /// <summary>
-    /// Extension methods for DataFrame grouping operations.
+    /// The existing implementation: Safe Managed Code.
+    /// Uses PrimitiveKeyMap (Dictionary-based) and Managed Parallelism for Strings.
     /// </summary>
-    public static class DataFrameGroupingExtensions
+    internal class StandardStrategy : IGroupByStrategy
     {
         private const int ParallelThreshold = 100_000;
         private const int BufferSize = 512;
 
-        /// <summary> Groups the DataFrame by the specified column using a CSR backend.
-        /// Automatically selects the optimal grouping strategy based on data type and characteristics.
-        /// </summary>
-        public static GroupedDataFrame GroupBy(this DataFrame df, string columnName)
+        public GroupedDataFrame Group(DataFrame df, string columnName)
         {
-            if (string.IsNullOrEmpty(columnName)) throw new ArgumentNullException(nameof(columnName));
-
             var col = df[columnName];
             Type t = Nullable.GetUnderlyingType(col.DataType) ?? col.DataType;
 
-            // Primitives -> Always Sequential (Memory Bound)
+            // Primitives -> Sequential
             if (t == typeof(int)) return GroupByPrimitiveSequential<int>(df, columnName);
             if (t == typeof(double)) return GroupByPrimitiveSequential<double>(df, columnName);
             if (t == typeof(long)) return GroupByPrimitiveSequential<long>(df, columnName);
             if (t == typeof(bool)) return GroupByPrimitiveSequential<bool>(df, columnName);
             if (t == typeof(DateTime)) return GroupByPrimitiveSequential<DateTime>(df, columnName);
 
-            // Strings -> Smart Switching (CPU Bound vs Overhead)
+            // Strings -> Smart Dispatch
             if (t == typeof(string)) return GroupByString(df, columnName);
 
-            throw new NotSupportedException($"GroupBy not yet implemented for type {t.Name} with CSR backend.");
+            throw new NotSupportedException($"GroupBy not implemented for type {t.Name}");
         }
 
-        // ... [Primitive Sequential & Parallel Code bleibt identisch wie vorher] ...
-        // Ich kürze hier ab, um Platz zu sparen. Bitte behalte den bestehenden Primitive-Code bei.
-        // Falls du ihn brauchst, sag Bescheid, aber er hat sich nicht geändert.
-
-        private static GroupedDataFrame GroupByPrimitiveSequential<T>(DataFrame df, string columnName) where T : unmanaged, IEquatable<T>
+        private GroupedDataFrame GroupByPrimitiveSequential<T>(DataFrame df, string columnName) where T : unmanaged, IEquatable<T>
         {
             var col = (IColumn<T>)df[columnName];
             var map = new PrimitiveKeyMap<T>(Math.Max(128, df.RowCount / 10), df.RowCount);
@@ -56,21 +45,15 @@ namespace LeichtFrame.Core
             return new GroupedDataFrame<T>(df, columnName, csr.Keys, csr.GroupOffsets, csr.RowIndices, nullIndices.Count > 0 ? nullIndices.ToArray() : null);
         }
 
-        // --- STRING SMART DISPATCHER ---
-
-        private static GroupedDataFrame GroupByString(DataFrame df, string columnName)
+        private GroupedDataFrame GroupByString(DataFrame df, string columnName)
         {
             var col = (StringColumn)df[columnName];
 
-            // 1. Check Row Count Threshold
             if (df.RowCount < ParallelThreshold)
             {
                 return GroupByStringSequential(df, columnName);
             }
 
-            // 2. Check Cardinality via Sampling
-            // Wenn die ersten 100 Zeilen nur wenige Duplikate enthalten, gehen wir von High Cardinality aus.
-            // Wenn wir viele Wiederholungen sehen, lohnt sich Parallelisierung evtl. nicht (Overhead).
             if (ShouldUseParallelStringProcessing(col))
             {
                 return GroupByStringParallel(df, columnName);
@@ -79,45 +62,25 @@ namespace LeichtFrame.Core
             return GroupByStringSequential(df, columnName);
         }
 
-        private static bool ShouldUseParallelStringProcessing(StringColumn col)
+        private bool ShouldUseParallelStringProcessing(StringColumn col)
         {
-            // Sampling: Wir schauen uns max 100 Zeilen an.
             int sampleSize = Math.Min(col.Length, 100);
             if (sampleSize == 0) return false;
-
-            // Wir nutzen ein kleines HashSet, um Unique Values zu zählen
-            // Aber um Allocations zu vermeiden, machen wir es simpel:
-            // Wir prüfen nur, ob wir *genug* Varianz sehen.
-
-            // Heuristik: Wenn wir > 20% unterschiedliche Werte im Sample haben, gehen wir von High-Card aus.
-            // Bei 100 items -> wenn wir > 20 verschiedene sehen -> Parallel.
-            // "Category" ("A", "B", "C"...) wird hier < 10 unique haben -> Sequential.
-            // "UniqueId" wird 100 unique haben -> Parallel.
-
-            var uniqueSampler = new System.Collections.Generic.HashSet<string>(sampleSize);
+            var uniqueSampler = new HashSet<string>(sampleSize);
             int uniqueCount = 0;
 
-            for (int i = 0; i < sampleSize; i += 1) // Step 1
+            for (int i = 0; i < sampleSize; i += 1)
             {
                 string? val = col.Get(i);
-                if (val != null && uniqueSampler.Add(val))
-                {
-                    uniqueCount++;
-                }
-
-                // Early Exit: Wenn wir schon viele Uniques gefunden haben
+                if (val != null && uniqueSampler.Add(val)) uniqueCount++;
                 if (uniqueCount > 20) return true;
             }
-
-            // Wenn wir hier ankommen, haben wir < 20 Uniques in 100 Zeilen gefunden.
-            // Das deutet auf Low Cardinality hin (z.B. Kategorien, Länder).
             return false;
         }
 
-        private static GroupedDataFrame GroupByStringSequential(DataFrame df, string columnName)
+        private GroupedDataFrame GroupByStringSequential(DataFrame df, string columnName)
         {
             var col = (StringColumn)df[columnName];
-            // Capacity Heuristic anpassen: Wenn wir hier landen, ist es oft Low Cardinality
             var map = new StringKeyMap(col.RawBytes, col.Offsets, Math.Max(128, df.RowCount / 100), df.RowCount);
             var nullIndices = new List<int>();
 
@@ -129,14 +92,11 @@ namespace LeichtFrame.Core
 
             var csr = map.ToCSR();
             map.Dispose();
-
             return new GroupedDataFrame<string>(df, columnName, csr.Keys, csr.Offsets, csr.Indices, nullIndices.Count > 0 ? nullIndices.ToArray() : null);
         }
 
-        private static GroupedDataFrame GroupByStringParallel(DataFrame df, string columnName)
+        private GroupedDataFrame GroupByStringParallel(DataFrame df, string columnName)
         {
-            // ... [Hier den exakt gleichen Parallel-Code von vorhin einfügen] ...
-            // Ich kopiere ihn der Vollständigkeit halber rein:
             var col = (StringColumn)df[columnName];
             int rowCount = df.RowCount;
             int partitionCount = Math.Max(16, Environment.ProcessorCount * 2);
@@ -245,7 +205,5 @@ namespace LeichtFrame.Core
             }
             return new GroupedDataFrame<string>(df, columnName, finalKeys, finalOffsets, finalIndices, !nullIndices.IsEmpty ? nullIndices.ToArray() : null);
         }
-
-        internal static object? GetRealValue(object key) => key;
     }
 }
