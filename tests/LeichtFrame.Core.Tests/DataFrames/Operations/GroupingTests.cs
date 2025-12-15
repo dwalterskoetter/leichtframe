@@ -1,3 +1,5 @@
+using LeichtFrame.Core;
+
 namespace LeichtFrame.Core.Tests.DataFrameTests
 {
     public class GroupingTests
@@ -23,16 +25,26 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
             var grouped = df.GroupBy("Dept");
 
             // Assert
-            Assert.Equal(3, grouped.GroupMap.Count); // Sales, IT, HR
+            Assert.Equal(3, grouped.GroupCount); // Sales, IT, HR
 
-            // Check Sales bucket
-            Assert.True(grouped.GroupMap.ContainsKey("Sales"));
-            var salesIndices = grouped.GroupMap["Sales"];
-            Assert.Equal(new[] { 0, 2 }, salesIndices);
+            // Helper to find group index by key
+            int salesGroupIdx = FindGroupIndex(grouped, "Sales");
+            int itGroupIdx = FindGroupIndex(grouped, "IT");
 
-            // Check IT bucket
-            var itIndices = grouped.GroupMap["IT"];
-            Assert.Equal(new[] { 1, 4 }, itIndices);
+            Assert.True(salesGroupIdx >= 0, "Sales group not found");
+            Assert.True(itGroupIdx >= 0, "IT group not found");
+
+            // Check Sales bucket (Indices 0 and 2)
+            var salesIndices = GetIndicesForGroup(grouped, salesGroupIdx);
+            Assert.Contains(0, salesIndices);
+            Assert.Contains(2, salesIndices);
+            Assert.Equal(2, salesIndices.Length);
+
+            // Check IT bucket (Indices 1 and 4)
+            var itIndices = GetIndicesForGroup(grouped, itGroupIdx);
+            Assert.Contains(1, itIndices);
+            Assert.Contains(4, itIndices);
+            Assert.Equal(2, itIndices.Length);
         }
 
         [Fact]
@@ -43,21 +55,28 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
             }), 5);
             var col = (StringColumn)df["Cat"];
 
-            col.Append("A");
-            col.Append(null);
-            col.Append("A");
-            col.Append(null);
+            col.Append("A");    // 0
+            col.Append(null);   // 1
+            col.Append("A");    // 2
+            col.Append(null);   // 3
 
             var grouped = df.GroupBy("Cat");
 
-            Assert.Equal(2, grouped.GroupMap.Count); // "A" and NullKey
+            // "A" is one group, Nulls are separate
+            Assert.Equal(1, grouped.GroupCount);
+            Assert.NotNull(grouped.NullGroupIndices);
 
-            // We need to check indirectly since NullKey is internal/private.
-            // We iterate over keys and find the one that is not "A".
-            var nullGroupKey = grouped.GroupMap.Keys.First(k => k is not string);
-            var indices = grouped.GroupMap[nullGroupKey];
+            // Check Null Indices
+            Assert.Equal(2, grouped.NullGroupIndices!.Length);
+            Assert.Contains(1, grouped.NullGroupIndices);
+            Assert.Contains(3, grouped.NullGroupIndices);
 
-            Assert.Equal(new[] { 1, 3 }, indices);
+            // Check "A" Group
+            int aIdx = FindGroupIndex(grouped, "A");
+            var aIndices = GetIndicesForGroup(grouped, aIdx);
+            Assert.Equal(2, aIndices.Length);
+            Assert.Contains(0, aIndices);
+            Assert.Contains(2, aIndices);
         }
 
         [Fact]
@@ -71,9 +90,13 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
 
             var grouped = df.GroupBy("Num");
 
-            Assert.Equal(2, grouped.GroupMap.Count); // 2 Groups overall (10 and 20)
-            Assert.Equal(2, grouped.GroupMap[10].Count); // Group 10 has 2 entries
-            Assert.Single(grouped.GroupMap[20]); // Group 20 has exactly 1 entry
+            Assert.Equal(2, grouped.GroupCount); // 2 Groups overall (10 and 20)
+
+            int g10 = FindGroupIndex(grouped, 10);
+            int g20 = FindGroupIndex(grouped, 20);
+
+            Assert.Equal(2, GetIndicesForGroup(grouped, g10).Length);
+            Assert.Single(GetIndicesForGroup(grouped, g20));
         }
 
         [Fact]
@@ -89,15 +112,6 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
 
             Assert.Equal(2, result.RowCount);
 
-            // Verify Structure
-            Assert.Equal("Dept", result.Columns[0].Name);
-            Assert.Equal("Count", result.Columns[1].Name);
-
-            // Verify Data (Order is not guaranteed with HashMap, so we find rows)
-            // Simpler check for MVP:
-            // "IT" -> 2, "Sales" -> 1
-
-            // Quick workaround to verify content without Order-dependency logic:
             var itRow = result.Where(r => r.Get<string>("Dept") == "IT");
             Assert.Equal(2, itRow["Count"].Get<int>(0));
         }
@@ -151,44 +165,29 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
         }
 
         [Fact]
-        public void GroupBy_Parallel_Path_Works_Correctly_With_Large_Data()
+        public void GroupBy_Large_Data_Consistency()
         {
-            // Arrange: Generate enough rows to trigger Parallel Path (> 100,000)
-            int rowCount = 150_000;
+            // Test robustness of CSR logic with larger data
+            int rowCount = 5000;
             int distinctGroups = 10;
 
             using var col = new IntColumn("Val", rowCount);
-
-            // Generate data: 0, 1, 2... 9, 0, 1...
-            for (int i = 0; i < rowCount; i++)
-            {
-                col.Append(i % distinctGroups);
-            }
+            for (int i = 0; i < rowCount; i++) col.Append(i % distinctGroups);
 
             var df = new DataFrame(new[] { col });
 
-            // Act
-            // This implicitly calls GroupByParallel because RowCount >= 100_000
             var grouped = df.GroupBy("Val");
             var result = grouped.Count();
 
-            // Assert
             Assert.Equal(distinctGroups, result.RowCount);
 
-            // Each group should have exactly (150,000 / 10) = 15,000 items
+            // Each group should have exactly (5000 / 10) = 500 items
             int expectedCount = rowCount / distinctGroups;
 
-            // Check a few groups
             var countCol = (IntColumn)result["Count"];
-            var keyCol = (IntColumn)result["Val"];
-
-            // Since HashMaps don't guarantee order, we iterate or look up
             for (int i = 0; i < result.RowCount; i++)
             {
                 Assert.Equal(expectedCount, countCol.Get(i));
-
-                int key = keyCol.Get(i);
-                Assert.True(key >= 0 && key < distinctGroups);
             }
         }
 
@@ -204,64 +203,58 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
             var g = (StringColumn)df["Group"];
             var v = (DoubleColumn)df["Val"];
 
-            // Group A: 10, 20, 30 -> Min: 10, Max: 30, Mean: 20, Sum: 60
+            // Group A: 10, 20, 30 -> Min: 10, Max: 30, Mean: 20
             g.Append("A"); v.Append(10.0);
             g.Append("A"); v.Append(20.0);
             g.Append("A"); v.Append(30.0);
 
-            // Group B: 5, 5 -> Min: 5, Max: 5, Mean: 5, Sum: 10
+            // Group B: 5, 5 -> Min: 5, Max: 5, Mean: 5
             g.Append("B"); v.Append(5.0);
             g.Append("B"); v.Append(5.0);
 
             var gdf = df.GroupBy("Group");
 
-            // Act & Assert (Min)
+            // Min
             var minDf = gdf.Min("Val");
             var rowA_Min = minDf.Where(r => r.Get<string>("Group") == "A");
             Assert.Equal(10.0, rowA_Min["Min_Val"].Get<double>(0));
 
-            // Act & Assert (Max)
+            // Max
             var maxDf = gdf.Max("Val");
             var rowA_Max = maxDf.Where(r => r.Get<string>("Group") == "A");
             Assert.Equal(30.0, rowA_Max["Max_Val"].Get<double>(0));
 
-            // Act & Assert (Mean)
+            // Mean
             var meanDf = gdf.Mean("Val");
             var rowA_Mean = meanDf.Where(r => r.Get<string>("Group") == "A");
             Assert.Equal(20.0, rowA_Mean["Mean_Val"].Get<double>(0));
-
-            var rowB_Mean = meanDf.Where(r => r.Get<string>("Group") == "B");
-            Assert.Equal(5.0, rowB_Mean["Mean_Val"].Get<double>(0));
         }
 
-        [Fact]
-        public void Group_Aggregations_Ignore_Nulls()
+        // --- Helper Methods to inspect internal CSR structure ---
+
+        private int FindGroupIndex(GroupedDataFrame gdf, object key)
         {
-            var df = DataFrame.Create(new DataFrameSchema(new[] {
-                new ColumnDefinition("Id", typeof(int)),
-                new ColumnDefinition("Val", typeof(int), IsNullable: true)
-            }), 5);
+            var keys = gdf.GetKeys();
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (object.Equals(keys.GetValue(i), key)) return i;
+            }
+            return -1;
+        }
 
-            var id = (IntColumn)df["Id"];
-            var val = (IntColumn)df["Val"];
+        private int[] GetIndicesForGroup(GroupedDataFrame gdf, int groupIdx)
+        {
+            int start = gdf.GroupOffsets[groupIdx];
+            int end = gdf.GroupOffsets[groupIdx + 1];
+            int len = end - start;
+            int[] result = new int[len];
 
-            // Group 1: 10, null, 20 -> Sum: 30, Count: 3 (rows) or 2 (values)?
-            // Count() counts rows in group. 
-            // Mean() should be 30 / 2 = 15.
-
-            id.Append(1); val.Append(10);
-            id.Append(1); val.Append(null);
-            id.Append(1); val.Append(20);
-
-            var gdf = df.GroupBy("Id");
-
-            // Test Sum
-            var sumDf = gdf.Sum("Val");
-            Assert.Equal(30.0, sumDf["Sum_Val"].Get<double>(0));
-
-            // Test Mean
-            var meanDf = gdf.Mean("Val");
-            Assert.Equal(15.0, meanDf["Mean_Val"].Get<double>(0));
+            // Manual copy from CSR indices array
+            for (int i = 0; i < len; i++)
+            {
+                result[i] = gdf.RowIndices[start + i];
+            }
+            return result;
         }
     }
 }

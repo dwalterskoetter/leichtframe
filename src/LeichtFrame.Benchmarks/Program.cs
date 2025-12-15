@@ -6,8 +6,6 @@ using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.CsProj;
-using System;
-using System.Linq;
 
 namespace LeichtFrame.Benchmarks
 {
@@ -15,20 +13,42 @@ namespace LeichtFrame.Benchmarks
     {
         public static void Main(string[] args)
         {
-            // --- 1. "Magic" Argument Logic ---
-            if (args.Length > 0 && args[0].Equals("all", StringComparison.OrdinalIgnoreCase))
+            // --- 1. Custom Arguments Parsing ---           
+            bool isFastMode = args.Any(a => a.Equals("fast", StringComparison.OrdinalIgnoreCase) ||
+                                            a.Equals("short", StringComparison.OrdinalIgnoreCase));
+
+            // Clean BDN Arguments
+            var bdnArgs = args.Where(a => !a.Equals("fast", StringComparison.OrdinalIgnoreCase) &&
+                                          !a.Equals("short", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            // "Magic" Argument: "all" -> "--filter *"
+            if (bdnArgs.Count > 0 && bdnArgs[0].Equals("all", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("🟢 Shortcut detected: Running ALL benchmarks...");
-                args = new[] { "--filter", "*" };
+                bdnArgs.Clear();
+                bdnArgs.Add("--filter");
+                bdnArgs.Add("*");
             }
 
-            // --- 2. Configuration ---
+            // --- 2. Job Configuration ---
+
+            // Basic-Job (always .NET 8 / x64)
+            var job = Job.Default
+                .WithRuntime(CoreRuntime.Core80)
+                .WithPlatform(Platform.X64)
+                .WithToolchain(CsProjCoreToolchain.NetCoreApp80);
+
+            if (isFastMode)
+            {
+                // Turbo-Mode for Development (less precision, but much faster)
+                job = job
+                    .WithWarmupCount(1)
+                    .WithIterationCount(3)
+                    .WithLaunchCount(1)
+                    .WithInvocationCount(16);
+            }
+
             var config = ManualConfig.Create(DefaultConfig.Instance)
-                .AddJob(Job.Default
-                    .WithRuntime(CoreRuntime.Core80)
-                    .WithPlatform(Platform.X64)
-                    .WithToolchain(CsProjCoreToolchain.NetCoreApp80)
-                )
+                .AddJob(job)
                 .AddExporter(MarkdownExporter.GitHub)
                 .WithOptions(ConfigOptions.JoinSummary)
                 .AddLogger(ConsoleLogger.Default)
@@ -41,26 +61,27 @@ namespace LeichtFrame.Benchmarks
             Console.WriteLine("=================================================");
             Console.ResetColor();
 
-            Console.WriteLine("Target:  Comparison against DuckDB.NET (In-Memory)");
-            Console.WriteLine("Dataset: 1,000,000 Rows (Synthetic POCOs)");
-            Console.WriteLine("Mode:    High-Precision (CsProj Toolchain / x64 / .NET 8)");
+            Console.WriteLine($"Mode:    {(isFastMode ? "⚡ FAST / DEV (Low Precision)" : "🐢 NORMAL (High Precision)")}");
+            Console.WriteLine("Target:  Comparison against DuckDB.NET");
+            Console.WriteLine("Dataset: 1,000,000 Rows (configured via Params)");
             Console.WriteLine();
 
             // --- 4. Help-Text ---
-            if (args.Length == 0)
+            if (bdnArgs.Count == 0)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("Usage Modes:");
-                Console.WriteLine("  1. Interactive:  Just press Enter (Menu)");
-                Console.WriteLine("  2. Run All:      dotnet run -c Release -- all");
-                Console.WriteLine("  3. Filter:       dotnet run -c Release -- --filter *Join*");
+                Console.WriteLine("Usage Examples:");
+                Console.WriteLine("  1. Interactive Menu:   dotnet run -c Release");
+                Console.WriteLine("  2. Run All (Normal):   dotnet run -c Release -- all");
+                Console.WriteLine("  3. Run All (Fast):     dotnet run -c Release -- all fast");
+                Console.WriteLine("  4. Filter (Fast):      dotnet run -c Release -- fast --filter \"*Join*\"");
                 Console.ResetColor();
                 Console.WriteLine();
                 Console.WriteLine("Select benchmarks from the list below:");
             }
 
             // --- 5. Start ---
-            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
+            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(bdnArgs.ToArray(), config);
         }
     }
 }

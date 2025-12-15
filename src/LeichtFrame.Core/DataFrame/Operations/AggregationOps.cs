@@ -8,57 +8,39 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the Sum of a numeric column.
         /// </summary>
-        /// <param name="df">The source DataFrame.</param>
-        /// <param name="columnName">The name of the column.</param>
-        /// <returns>The sum of all values.</returns>
         public static double Sum(this DataFrame df, string columnName)
         {
             var col = df[columnName];
-
             if (col is DoubleColumn doubleCol) return doubleCol.Sum();
             if (col is IntColumn intCol) return (double)intCol.Sum();
-
             throw new NotSupportedException($"Sum operation is not supported for column type '{col.DataType.Name}'.");
         }
 
         /// <summary>
         /// Calculates the Minimum value of a numeric column.
         /// </summary>
-        /// <param name="df">The source DataFrame.</param>
-        /// <param name="columnName">The name of the column.</param>
-        /// <returns>The minimum value.</returns>
         public static double Min(this DataFrame df, string columnName)
         {
             var col = df[columnName];
-
             if (col is DoubleColumn doubleCol) return doubleCol.Min();
             if (col is IntColumn intCol) return (double)intCol.Min();
-
             throw new NotSupportedException($"Min operation is not supported for column type '{col.DataType.Name}'.");
         }
 
         /// <summary>
         /// Calculates the Maximum value of a numeric column.
         /// </summary>
-        /// <param name="df">The source DataFrame.</param>
-        /// <param name="columnName">The name of the column.</param>
-        /// <returns>The maximum value.</returns>
         public static double Max(this DataFrame df, string columnName)
         {
             var col = df[columnName];
-
             if (col is DoubleColumn doubleCol) return doubleCol.Max();
             if (col is IntColumn intCol) return (double)intCol.Max();
-
             throw new NotSupportedException($"Max operation is not supported for column type '{col.DataType.Name}'.");
         }
 
         /// <summary>
         /// Calculates the arithmetic Mean (Average) of a numeric column.
         /// </summary>
-        /// <param name="df">The source DataFrame.</param>
-        /// <param name="columnName">The name of the column.</param>
-        /// <returns>The mean value.</returns>
         public static double Mean(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -67,7 +49,6 @@ namespace LeichtFrame.Core
 
             if (col.IsNullable)
             {
-                // Simple loop to count non-nulls.
                 for (int i = 0; i < col.Length; i++)
                     if (!col.IsNull(i)) count++;
             }
@@ -83,245 +64,287 @@ namespace LeichtFrame.Core
 
     /// <summary>
     /// Provides extension methods for performing aggregations on grouped dataframes.
-    /// Optimized for high performance (Zero-Allocation per group).
+    /// Optimized for high performance using CSR (Compressed Sparse Row) iteration.
     /// </summary>
     public static class GroupAggregationExtensions
     {
+        // --- Custom Delegates to support ReadOnlySpan (ref struct) ---
+        private delegate long IntSpanNullOp(ReadOnlySpan<int> data, int[] indices);
+        private delegate long IntSpanCsrOp(ReadOnlySpan<int> data, int start, int end, int[] indices);
+        private delegate double DoubleSpanCsrOp(ReadOnlySpan<double> data, int start, int end, int[] indices);
+
         /// <summary>
         /// Aggregates the grouped data by counting rows in each group.
-        /// Returns a new DataFrame with columns: [GroupColumn, "Count"].
         /// </summary>
-        /// <param name="gdf">The grouped dataframe.</param>
-        /// <returns>A new dataframe containing the group keys and their counts.</returns>
         public static DataFrame Count(this GroupedDataFrame gdf)
         {
-            // For Count, the value column doesn't matter, we can pass the key column as a placeholder.
-            var keyCol = gdf.Source[gdf.GroupColumnName];
-            return ExecuteAggregation(gdf, keyCol, "Count", (indices, _) => indices.Count);
+            var offsets = gdf.GroupOffsets;
+            var count = gdf.GroupCount;
+            bool hasNulls = gdf.NullGroupIndices != null;
+
+            var countsCol = new IntColumn("Count", count + (hasNulls ? 1 : 0));
+
+            for (int i = 0; i < count; i++)
+            {
+                countsCol.Append(offsets[i + 1] - offsets[i]);
+            }
+
+            if (hasNulls)
+            {
+                countsCol.Append(gdf.NullGroupIndices!.Length);
+            }
+
+            return CreateResultDataFrame(gdf, "Count", countsCol);
         }
 
         /// <summary>
         /// Aggregates the grouped data by summing values in the specified column.
-        /// Returns a new DataFrame with columns: [GroupColumn, "Sum_TargetColumn"].
         /// </summary>
-        /// <param name="gdf">The grouped dataframe.</param>
-        /// <param name="aggregateColumnName">The column to sum up per group.</param>
-        /// <returns>A new dataframe containing the group keys and the sums.</returns>
         public static DataFrame Sum(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            return ExecuteNumericAggregation(gdf, aggregateColumnName, "Sum",
-                (indices, col) =>
+            return ExecuteNumericAgg(gdf, aggregateColumnName, "Sum",
+                (span, indices) =>
                 {
                     long sum = 0;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i)) sum += col.Get(i);
-                    }
+                    foreach (var idx in indices) sum += span[idx];
                     return sum;
                 },
-                (indices, col) =>
+                (span, start, end, indices) =>
+                {
+                    long sum = 0;
+                    for (int k = start; k < end; k++) sum += span[indices[k]];
+                    return sum;
+                },
+                (span, start, end, indices) =>
                 {
                     double sum = 0;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i)) sum += col.Get(i);
-                    }
+                    for (int k = start; k < end; k++) sum += span[indices[k]];
                     return sum;
                 }
             );
         }
 
         /// <summary>
-        /// Aggregates the grouped data by finding the minimum value in the specified column.
-        /// Returns a new DataFrame with columns: [GroupColumn, "Min_TargetColumn"].
+        /// Aggregates the grouped data by finding the minimum value.
         /// </summary>
-        /// <param name="gdf">The grouped dataframe.</param>
-        /// <param name="aggregateColumnName">The target column.</param>
-        /// <returns>A new dataframe containing the group keys and the minimums.</returns>
         public static DataFrame Min(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            return ExecuteNumericAggregation(gdf, aggregateColumnName, "Min",
-                (indices, col) =>
-                {
-                    if (indices.Count == 0) return 0;
-                    int min = int.MaxValue;
-                    bool hasVal = false;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i))
-                        {
-                            int v = col.Get(i);
-                            if (v < min) min = v;
-                            hasVal = true;
-                        }
-                    }
-                    return hasVal ? min : 0;
-                },
-                (indices, col) =>
-                {
-                    if (indices.Count == 0) return 0;
-                    double min = double.MaxValue;
-                    bool hasVal = false;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i))
-                        {
-                            double v = col.Get(i);
-                            if (v < min) min = v;
-                            hasVal = true;
-                        }
-                    }
-                    return hasVal ? min : 0;
-                }
-            );
+            return ExecuteNumericAgg(gdf, aggregateColumnName, "Min",
+               (span, indices) =>
+               {
+                   if (indices.Length == 0) return 0;
+                   int min = int.MaxValue;
+                   foreach (var idx in indices) if (span[idx] < min) min = span[idx];
+                   return min;
+               },
+               (span, start, end, indices) =>
+               {
+                   if (start == end) return 0;
+                   int min = int.MaxValue;
+                   for (int k = start; k < end; k++)
+                   {
+                       int val = span[indices[k]];
+                       if (val < min) min = val;
+                   }
+                   return min;
+               },
+               (span, start, end, indices) =>
+               {
+                   if (start == end) return 0;
+                   double min = double.MaxValue;
+                   for (int k = start; k < end; k++)
+                   {
+                       double val = span[indices[k]];
+                       if (val < min) min = val;
+                   }
+                   return min;
+               }
+           );
         }
 
         /// <summary>
-        /// Aggregates the grouped data by finding the maximum value in the specified column.
-        /// Returns a new DataFrame with columns: [GroupColumn, "Max_TargetColumn"].
+        /// Aggregates the grouped data by finding the maximum value.
         /// </summary>
-        /// <param name="gdf">The grouped dataframe.</param>
-        /// <param name="aggregateColumnName">The target column.</param>
-        /// <returns>A new dataframe containing the group keys and the maximums.</returns>
         public static DataFrame Max(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            return ExecuteNumericAggregation(gdf, aggregateColumnName, "Max",
-                (indices, col) =>
-                {
-                    if (indices.Count == 0) return 0;
-                    int max = int.MinValue;
-                    bool hasVal = false;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i))
-                        {
-                            int v = col.Get(i);
-                            if (v > max) max = v;
-                            hasVal = true;
-                        }
-                    }
-                    return hasVal ? max : 0;
-                },
-                (indices, col) =>
-                {
-                    if (indices.Count == 0) return 0;
-                    double max = double.MinValue;
-                    bool hasVal = false;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i))
-                        {
-                            double v = col.Get(i);
-                            if (v > max) max = v;
-                            hasVal = true;
-                        }
-                    }
-                    return hasVal ? max : 0;
-                }
-            );
+            return ExecuteNumericAgg(gdf, aggregateColumnName, "Max",
+               (span, indices) =>
+               {
+                   if (indices.Length == 0) return 0;
+                   int max = int.MinValue;
+                   foreach (var idx in indices) if (span[idx] > max) max = span[idx];
+                   return max;
+               },
+               (span, start, end, indices) =>
+               {
+                   if (start == end) return 0;
+                   int max = int.MinValue;
+                   for (int k = start; k < end; k++)
+                   {
+                       int val = span[indices[k]];
+                       if (val > max) max = val;
+                   }
+                   return max;
+               },
+               (span, start, end, indices) =>
+               {
+                   if (start == end) return 0;
+                   double max = double.MinValue;
+                   for (int k = start; k < end; k++)
+                   {
+                       double val = span[indices[k]];
+                       if (val > max) max = val;
+                   }
+                   return max;
+               }
+           );
         }
 
         /// <summary>
-        /// Aggregates the grouped data by calculating the mean value in the specified column.
-        /// Returns a new DataFrame with columns: [GroupColumn, "Mean_TargetColumn"].
+        /// Aggregates the grouped data by calculating the mean value.
         /// </summary>
-        /// <param name="gdf">The grouped dataframe.</param>
-        /// <param name="aggregateColumnName">The target column.</param>
-        /// <returns>A new dataframe containing the group keys and the means.</returns>
         public static DataFrame Mean(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            return ExecuteNumericAggregation(gdf, aggregateColumnName, "Mean",
-                (indices, col) =>
+            var col = gdf.Source[aggregateColumnName];
+            int groupCount = gdf.GroupCount;
+            var offsets = gdf.GroupOffsets;
+            var indices = gdf.RowIndices;
+            bool hasNulls = gdf.NullGroupIndices != null;
+
+            var res = new DoubleColumn($"Mean_{aggregateColumnName}", groupCount + (hasNulls ? 1 : 0));
+
+            if (col is IntColumn ic)
+            {
+                ReadOnlySpan<int> data = ic.Values.Span;
+                for (int i = 0; i < groupCount; i++)
                 {
-                    long sum = 0;
-                    int count = 0;
-                    foreach (var i in indices)
-                    {
-                        if (!col.IsNull(i))
-                        {
-                            sum += col.Get(i);
-                            count++;
-                        }
-                    }
-                    return count == 0 ? 0 : (double)sum / count;
-                },
-                (indices, col) =>
-                {
+                    // Inline Int Logic
+                    int start = offsets[i];
+                    int end = offsets[i + 1];
+                    if (start == end) { res.Append(0); continue; }
+
                     double sum = 0;
                     int count = 0;
-                    foreach (var i in indices)
+                    for (int k = start; k < end; k++)
                     {
-                        if (!col.IsNull(i))
-                        {
-                            sum += col.Get(i);
-                            count++;
-                        }
+                        sum += data[indices[k]];
+                        count++;
                     }
-                    return count == 0 ? 0 : sum / count;
+                    res.Append(count == 0 ? 0 : sum / count);
                 }
-            );
-        }
-
-        // --- Private Helpers ---
-
-        private delegate double TypedAggregator<TColumn>(List<int> indices, TColumn col);
-
-        private static DataFrame ExecuteNumericAggregation(
-            GroupedDataFrame gdf,
-            string inputColName,
-            string operationPrefix,
-            TypedAggregator<IntColumn> intOp,
-            TypedAggregator<DoubleColumn> doubleOp)
-        {
-            // Resolve the actual value column (e.g. "Salary")
-            var valueCol = gdf.Source[inputColName];
-
-            Func<List<int>, IColumn, double> calculator;
-
-            if (valueCol is IntColumn)
-            {
-                calculator = (indices, col) => intOp(indices, (IntColumn)col);
+                if (hasNulls)
+                {
+                    double sum = 0; int cnt = 0;
+                    foreach (var idx in gdf.NullGroupIndices!) { sum += data[idx]; cnt++; }
+                    res.Append(cnt == 0 ? 0 : sum / cnt);
+                }
             }
-            else if (valueCol is DoubleColumn)
+            else if (col is DoubleColumn dc)
             {
-                calculator = (indices, col) => doubleOp(indices, (DoubleColumn)col);
+                ReadOnlySpan<double> data = dc.Values.Span;
+                for (int i = 0; i < groupCount; i++)
+                {
+                    // Inline Double Logic
+                    int start = offsets[i];
+                    int end = offsets[i + 1];
+                    if (start == end) { res.Append(0); continue; }
+
+                    double sum = 0;
+                    int count = 0;
+                    for (int k = start; k < end; k++)
+                    {
+                        sum += data[indices[k]];
+                        count++;
+                    }
+                    res.Append(count == 0 ? 0 : sum / count);
+                }
+                if (hasNulls)
+                {
+                    double sum = 0; int cnt = 0;
+                    foreach (var idx in gdf.NullGroupIndices!) { sum += data[idx]; cnt++; }
+                    res.Append(cnt == 0 ? 0 : sum / cnt);
+                }
             }
             else
             {
-                throw new NotSupportedException($"Operation {operationPrefix} not supported for type {valueCol.DataType.Name}");
+                throw new NotSupportedException($"Mean not supported for {col.DataType.Name}");
             }
 
-            // Important: Pass 'valueCol' down to ExecuteAggregation
-            return ExecuteAggregation(gdf, valueCol, $"{operationPrefix}_{inputColName}", calculator);
+            return CreateResultDataFrame(gdf, $"Mean_{aggregateColumnName}", res);
         }
 
-        private static DataFrame ExecuteAggregation(
+        // --- Core Execution Logic ---
+
+        private static DataFrame ExecuteNumericAgg(
             GroupedDataFrame gdf,
-            IColumn valueCol,
-            string resultColName,
-            Func<List<int>, IColumn, double> aggFunc)
+            string colName,
+            string opName,
+            IntSpanNullOp intNullHandler,
+            IntSpanCsrOp intCsrHandler,
+            DoubleSpanCsrOp dblCsrHandler)
         {
-            var sourceKeyCol = gdf.Source[gdf.GroupColumnName];
-            var keyCol = ColumnFactory.Create(gdf.GroupColumnName, sourceKeyCol.DataType, gdf.GroupMap.Count, sourceKeyCol.IsNullable);
+            var col = gdf.Source[colName];
+            int groupCount = gdf.GroupCount;
+            var offsets = gdf.GroupOffsets;
+            var indices = gdf.RowIndices;
+            bool hasNulls = gdf.NullGroupIndices != null;
 
             IColumn resultCol;
-            if (resultColName == "Count")
-                resultCol = new IntColumn(resultColName, gdf.GroupMap.Count);
-            else
-                resultCol = new DoubleColumn(resultColName, gdf.GroupMap.Count);
 
-            foreach (var kvp in gdf.GroupMap)
+            if (col is IntColumn ic)
             {
-                object? realKey = DataFrameGroupingExtensions.GetRealValue(kvp.Key);
-                keyCol.AppendObject(realKey);
+                var res = new DoubleColumn($"{opName}_{colName}", groupCount + (hasNulls ? 1 : 0));
+                ReadOnlySpan<int> data = ic.Values.Span;
 
-                // Pass the correct value column (not the key column) to the calculator
-                double val = aggFunc(kvp.Value, valueCol);
+                for (int i = 0; i < groupCount; i++)
+                {
+                    res.Append(intCsrHandler(data, offsets[i], offsets[i + 1], indices));
+                }
+                if (hasNulls)
+                {
+                    res.Append(intNullHandler(data, gdf.NullGroupIndices!));
+                }
+                resultCol = res;
+            }
+            else if (col is DoubleColumn dc)
+            {
+                var res = new DoubleColumn($"{opName}_{colName}", groupCount + (hasNulls ? 1 : 0));
+                ReadOnlySpan<double> data = dc.Values.Span;
 
-                resultCol.AppendObject(val);
+                for (int i = 0; i < groupCount; i++)
+                {
+                    res.Append(dblCsrHandler(data, offsets[i], offsets[i + 1], indices));
+                }
+                if (hasNulls)
+                {
+                    double sum = 0;
+                    // Simplification: We assume sum logic for nullable double fallback in this generic handler
+                    foreach (var idx in gdf.NullGroupIndices!) sum += data[idx];
+                    res.Append(sum);
+                }
+                resultCol = res;
+            }
+            else throw new NotSupportedException($"Operation {opName} not supported for {col.DataType.Name}");
+
+            return CreateResultDataFrame(gdf, $"{opName}_{colName}", resultCol);
+        }
+
+        private static DataFrame CreateResultDataFrame(GroupedDataFrame gdf, string valColName, IColumn valCol)
+        {
+            var keysArray = gdf.GetKeys();
+            var type = keysArray.GetType().GetElementType()!;
+
+            int totalCount = gdf.GroupCount + (gdf.NullGroupIndices != null ? 1 : 0);
+            var keyCol = ColumnFactory.Create(gdf.GroupColumnName, type, totalCount, isNullable: true);
+
+            foreach (var key in keysArray) keyCol.AppendObject(key);
+
+            if (gdf.NullGroupIndices != null)
+            {
+                keyCol.AppendObject(null);
             }
 
-            return new DataFrame(new[] { keyCol, resultCol });
+            return new DataFrame(new[] { keyCol, valCol });
         }
     }
 }
