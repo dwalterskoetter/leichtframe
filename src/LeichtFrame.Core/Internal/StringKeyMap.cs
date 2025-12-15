@@ -13,7 +13,6 @@ namespace LeichtFrame.Core.Internal
         private readonly byte[] _bytes;
         private readonly int[] _offsets;
 
-        // Group management
         private int[] _groupHeads;
         private int[] _groupTails;
         private int[] _groupCounts;
@@ -24,12 +23,14 @@ namespace LeichtFrame.Core.Internal
         {
             public int HashCode;
             public int Next;
-            public int FirstRowIdx;
+            public int FirstGlobalRowIdx;
         }
 
         public int Count => _count;
 
-        public StringKeyMap(byte[] bytes, int[] offsets, int capacity, int rowCount)
+        // capacity: Geschätzte Anzahl Gruppen
+        // localRowCount: Größe des lokalen RowNext Arrays (Partition Size)
+        public StringKeyMap(byte[] bytes, int[] offsets, int capacity, int localRowCount)
         {
             _bytes = bytes;
             _offsets = offsets;
@@ -50,26 +51,33 @@ namespace LeichtFrame.Core.Internal
 
             _groupCounts = new int[size];
 
-            RowNext = new int[rowCount];
-            Array.Fill(RowNext, -1); // Wichtig für End-Erkennung
+            RowNext = new int[localRowCount];
+            Array.Fill(RowNext, -1);
         }
 
+        // Sequential: Global Index == Local Index
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AddRow(int rowIndex)
+        public void AddRow(int globalRowIndex)
         {
-            int start = _offsets[rowIndex];
-            int len = _offsets[rowIndex + 1] - start;
+            AddRow(globalRowIndex, globalRowIndex);
+        }
+
+        // Parallel: Global Index (für Datenzugriff) != Local Index (für LinkedList Speicher)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddRow(int globalRowIndex, int localRowIndex)
+        {
+            // 1. Lookup (Hash Global Data)
+            int start = _offsets[globalRowIndex];
+            int len = _offsets[globalRowIndex + 1] - start;
             int hashCode = ComputeHash(start, len);
             int bucket = (hashCode & 0x7FFFFFFF) % _buckets.Length;
 
             int groupIndex = -1;
-            // Linear chaining lookup
             for (int i = _buckets[bucket]; i >= 0; i = _entries[i].Next)
             {
                 if (_entries[i].HashCode == hashCode)
                 {
-                    // Full comparison
-                    int repRow = _entries[i].FirstRowIdx;
+                    int repRow = _entries[i].FirstGlobalRowIdx;
                     int repStart = _offsets[repRow];
                     int repLen = _offsets[repRow + 1] - repStart;
                     if (len == repLen)
@@ -85,7 +93,7 @@ namespace LeichtFrame.Core.Internal
                 }
             }
 
-            // New Group
+            // 2. Insert new Group
             if (groupIndex == -1)
             {
                 if (_freeList >= 0) { groupIndex = _freeList; _freeList = _entries[groupIndex].Next; }
@@ -99,22 +107,22 @@ namespace LeichtFrame.Core.Internal
                 ref Entry entry = ref _entries[groupIndex];
                 entry.HashCode = hashCode;
                 entry.Next = _buckets[bucket];
-                entry.FirstRowIdx = rowIndex;
+                entry.FirstGlobalRowIdx = globalRowIndex;
                 _buckets[bucket] = groupIndex;
             }
 
-            // Append to LinkedList
+            // 3. Append to Linked List (using Local Index)
             int tail = _groupTails[groupIndex];
             if (tail == -1)
             {
-                _groupHeads[groupIndex] = rowIndex;
+                _groupHeads[groupIndex] = localRowIndex;
             }
             else
             {
-                RowNext[tail] = rowIndex;
+                RowNext[tail] = localRowIndex;
             }
-            _groupTails[groupIndex] = rowIndex;
-            RowNext[rowIndex] = -1;
+            _groupTails[groupIndex] = localRowIndex;
+            RowNext[localRowIndex] = -1;
 
             _groupCounts[groupIndex]++;
         }
@@ -132,15 +140,14 @@ namespace LeichtFrame.Core.Internal
 
             for (int i = 0; i < _count; i++)
             {
-                // Materialize String Key ONCE
-                int repRow = _entries[i].FirstRowIdx;
+                // Materialize Key
+                int repRow = _entries[i].FirstGlobalRowIdx;
                 int start = _offsets[repRow];
                 int len = _offsets[repRow + 1] - start;
                 keys[i] = Encoding.UTF8.GetString(_bytes, start, len);
 
                 offsets[i] = currentOffset;
 
-                // Traverse List
                 int rowIdx = _groupHeads[i];
                 int ptr = currentOffset;
                 while (rowIdx != -1)

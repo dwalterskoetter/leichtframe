@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace LeichtFrame.Core
 {
     /// <summary>
@@ -8,6 +10,10 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the Sum of a numeric column.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The sum of all values.</returns>
+        /// <exception cref="NotSupportedException">Thrown if the column type is not numeric.</exception>
         public static double Sum(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -19,6 +25,10 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the Minimum value of a numeric column.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The minimum value.</returns>
+        /// <exception cref="NotSupportedException">Thrown if the column type is not numeric.</exception>
         public static double Min(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -30,6 +40,10 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the Maximum value of a numeric column.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The maximum value.</returns>
+        /// <exception cref="NotSupportedException">Thrown if the column type is not numeric.</exception>
         public static double Max(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -41,6 +55,9 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Calculates the arithmetic Mean (Average) of a numeric column.
         /// </summary>
+        /// <param name="df">The source DataFrame.</param>
+        /// <param name="columnName">The name of the column.</param>
+        /// <returns>The mean value.</returns>
         public static double Mean(this DataFrame df, string columnName)
         {
             var col = df[columnName];
@@ -75,7 +92,10 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Aggregates the grouped data by counting rows in each group.
+        /// Returns a new DataFrame with columns: [GroupColumn, "Count"].
         /// </summary>
+        /// <param name="gdf">The grouped dataframe.</param>
+        /// <returns>A new dataframe containing the group keys and their counts.</returns>
         public static DataFrame Count(this GroupedDataFrame gdf)
         {
             var offsets = gdf.GroupOffsets;
@@ -99,7 +119,11 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Aggregates the grouped data by summing values in the specified column.
+        /// Returns a new DataFrame with columns: [GroupColumn, "Sum_TargetColumn"].
         /// </summary>
+        /// <param name="gdf">The grouped dataframe.</param>
+        /// <param name="aggregateColumnName">The column to sum up per group.</param>
+        /// <returns>A new dataframe containing the group keys and the sums.</returns>
         public static DataFrame Sum(this GroupedDataFrame gdf, string aggregateColumnName)
         {
             return ExecuteNumericAgg(gdf, aggregateColumnName, "Sum",
@@ -125,7 +149,7 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Aggregates the grouped data by finding the minimum value.
+        /// Aggregates the grouped data by finding the minimum value in the specified column.
         /// </summary>
         public static DataFrame Min(this GroupedDataFrame gdf, string aggregateColumnName)
         {
@@ -163,7 +187,7 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Aggregates the grouped data by finding the maximum value.
+        /// Aggregates the grouped data by finding the maximum value in the specified column.
         /// </summary>
         public static DataFrame Max(this GroupedDataFrame gdf, string aggregateColumnName)
         {
@@ -201,7 +225,7 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Aggregates the grouped data by calculating the mean value.
+        /// Aggregates the grouped data by calculating the mean value in the specified column.
         /// </summary>
         public static DataFrame Mean(this GroupedDataFrame gdf, string aggregateColumnName)
         {
@@ -218,7 +242,6 @@ namespace LeichtFrame.Core
                 ReadOnlySpan<int> data = ic.Values.Span;
                 for (int i = 0; i < groupCount; i++)
                 {
-                    // Inline Int Logic
                     int start = offsets[i];
                     int end = offsets[i + 1];
                     if (start == end) { res.Append(0); continue; }
@@ -244,7 +267,6 @@ namespace LeichtFrame.Core
                 ReadOnlySpan<double> data = dc.Values.Span;
                 for (int i = 0; i < groupCount; i++)
                 {
-                    // Inline Double Logic
                     int start = offsets[i];
                     int end = offsets[i + 1];
                     if (start == end) { res.Append(0); continue; }
@@ -318,7 +340,7 @@ namespace LeichtFrame.Core
                 if (hasNulls)
                 {
                     double sum = 0;
-                    // Simplification: We assume sum logic for nullable double fallback in this generic handler
+                    // For fallback compatibility we assume sum-like behavior for Double Null Group
                     foreach (var idx in gdf.NullGroupIndices!) sum += data[idx];
                     res.Append(sum);
                 }
