@@ -2,6 +2,7 @@ namespace LeichtFrame.Core
 {
     /// <summary>
     /// Provides extension methods for joining multiple <see cref="DataFrame"/> objects.
+    /// Optimized with typed HashMaps to avoid boxing overhead.
     /// </summary>
     public static class DataFrameJoinExtensions
     {
@@ -9,23 +10,46 @@ namespace LeichtFrame.Core
         /// Joins two DataFrames based on a common key column using a Hash Join algorithm.
         /// Supports Inner and Left joins.
         /// </summary>
-        /// <param name="left">The left DataFrame.</param>
-        /// <param name="right">The right DataFrame.</param>
-        /// <param name="on">The join key column.</param>
-        /// <param name="joinType">The type of join (Inner or Left).</param>
         public static DataFrame Join(this DataFrame left, DataFrame right, string on, JoinType joinType = JoinType.Inner)
         {
-            var leftKeyCol = left[on];
-            var rightKeyCol = right[on];
+            Type type = left[on].DataType;
 
-            // 1. Build Phase: Create Hash Map from right table
-            // Key: Cell value, Value: List of row indices in 'right'
-            var hashTable = new Dictionary<object, List<int>>();
-            object nullSentinel = new object();
+            Type coreType = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (coreType == typeof(int))
+                return ExecuteJoin<int>(left, right, on, joinType);
+
+            if (coreType == typeof(double))
+                return ExecuteJoin<double>(left, right, on, joinType);
+
+            if (coreType == typeof(string))
+                return ExecuteJoin<string>(left, right, on, joinType);
+
+            if (coreType == typeof(bool))
+                return ExecuteJoin<bool>(left, right, on, joinType);
+
+            if (coreType == typeof(DateTime))
+                return ExecuteJoin<DateTime>(left, right, on, joinType);
+
+            return ExecuteJoin<object>(left, right, on, joinType);
+        }
+
+        private static DataFrame ExecuteJoin<T>(DataFrame left, DataFrame right, string on, JoinType joinType)
+            where T : notnull
+        {
+            var leftKeyCol = (IColumn<T>)left[on];
+            var rightKeyCol = (IColumn<T>)right[on];
+
+            var hashTable = new Dictionary<T, List<int>>();
 
             for (int r = 0; r < right.RowCount; r++)
             {
-                object key = rightKeyCol.GetValue(r) ?? nullSentinel;
+                if (rightKeyCol.IsNull(r)) continue;
+
+                T key = rightKeyCol.GetValue(r);
+
+                if (key == null) continue;
+
                 if (!hashTable.TryGetValue(key, out var indices))
                 {
                     indices = new List<int>();
@@ -34,18 +58,30 @@ namespace LeichtFrame.Core
                 indices.Add(r);
             }
 
-            // 2. Probe Phase: Scan left table
-            // We store indices. For Right side, -1 indicates "No Match" (for Left Join).
             var leftIndices = new List<int>(left.RowCount);
             var rightIndices = new List<int>(left.RowCount);
 
             for (int l = 0; l < left.RowCount; l++)
             {
-                object key = leftKeyCol.GetValue(l) ?? nullSentinel;
+                if (leftKeyCol.IsNull(l))
+                {
+                    if (joinType == JoinType.Left)
+                    {
+                        leftIndices.Add(l);
+                        rightIndices.Add(-1);
+                    }
+                    continue;
+                }
+
+                T key = leftKeyCol.GetValue(l);
+                if (key == null)
+                {
+                    if (joinType == JoinType.Left) { leftIndices.Add(l); rightIndices.Add(-1); }
+                    continue;
+                }
 
                 if (hashTable.TryGetValue(key, out var matchingRightIndices))
                 {
-                    // Match(es) found -> Add all combinations (Cartesian product for duplicates)
                     foreach (var rIdx in matchingRightIndices)
                     {
                         leftIndices.Add(l);
@@ -54,37 +90,37 @@ namespace LeichtFrame.Core
                 }
                 else if (joinType == JoinType.Left)
                 {
-                    // No Match -> Preserve Left row, Right is missing (-1)
                     leftIndices.Add(l);
                     rightIndices.Add(-1);
                 }
-                // Else (Inner Join): Skip row
             }
 
-            // 3. Materialize Phase
+            return MaterializeResult(left, right, on, leftIndices, rightIndices, joinType);
+        }
+
+        private static DataFrame MaterializeResult(
+            DataFrame left,
+            DataFrame right,
+            string on,
+            List<int> leftIndices,
+            List<int> rightIndices,
+            JoinType joinType)
+        {
             var newColumns = new List<IColumn>();
 
-            // 3a. Left Columns (Direct Subset)
             foreach (var col in left.Columns)
             {
                 newColumns.Add(col.CloneSubset(leftIndices));
             }
 
-            // 3b. Right Columns (Handle -1 and enforce Nullability)
             foreach (var col in right.Columns)
             {
-                if (col.Name == on) continue; // Skip join key
+                if (col.Name == on) continue;
 
                 if (left.Schema.HasColumn(col.Name))
-                {
-                    throw new NotSupportedException(
-                        $"Column name collision: '{col.Name}' exists in both DataFrames.");
-                }
+                    throw new NotSupportedException($"Column collision: '{col.Name}' exists in both DataFrames.");
 
-                // If Left Join, right columns MUST be nullable to hold the missing values.
                 bool forceNullable = joinType == JoinType.Left || col.IsNullable;
-
-                // Helper to create the new column with nulls where index is -1
                 IColumn newCol = MaterializeRightColumn(col, rightIndices, forceNullable);
                 newColumns.Add(newCol);
             }
@@ -94,59 +130,59 @@ namespace LeichtFrame.Core
 
         private static IColumn MaterializeRightColumn(IColumn source, List<int> indices, bool isNullable)
         {
-            // We use ColumnFactory to create the target column (correctly typed)
             IColumn newCol = ColumnFactory.Create(source.Name, source.DataType, indices.Count, isNullable);
 
-            // Optimization: Dispatch by type to avoid boxing in the loop
             if (source is IntColumn ic && newCol is IntColumn nic)
             {
-                foreach (int idx in indices)
+                for (int i = 0; i < indices.Count; i++)
                 {
-                    if (idx == -1) nic.Append(null);
-                    else if (ic.IsNull(idx)) nic.Append(null);
+                    int idx = indices[i];
+                    if (idx == -1 || ic.IsNull(idx)) nic.Append(null);
                     else nic.Append(ic.Get(idx));
                 }
             }
             else if (source is DoubleColumn dc && newCol is DoubleColumn ndc)
             {
-                foreach (int idx in indices)
+                for (int i = 0; i < indices.Count; i++)
                 {
-                    if (idx == -1) ndc.Append(null);
-                    else if (dc.IsNull(idx)) ndc.Append(null);
+                    int idx = indices[i];
+                    if (idx == -1 || dc.IsNull(idx)) ndc.Append(null);
                     else ndc.Append(dc.Get(idx));
                 }
             }
             else if (source is StringColumn sc && newCol is StringColumn nsc)
             {
-                foreach (int idx in indices)
+                for (int i = 0; i < indices.Count; i++)
                 {
+                    int idx = indices[i];
                     if (idx == -1) nsc.Append(null);
-                    else nsc.Append(sc.Get(idx)); // Get handles null internally usually, but IsNull check is safe
+                    else nsc.Append(sc.Get(idx));
                 }
             }
             else if (source is BoolColumn bc && newCol is BoolColumn nbc)
             {
-                foreach (int idx in indices)
+                for (int i = 0; i < indices.Count; i++)
                 {
-                    if (idx == -1) nbc.Append(null);
-                    else if (bc.IsNull(idx)) nbc.Append(null);
+                    int idx = indices[i];
+                    if (idx == -1 || bc.IsNull(idx)) nbc.Append(null);
                     else nbc.Append(bc.Get(idx));
                 }
             }
             else if (source is DateTimeColumn dtc && newCol is DateTimeColumn ndtc)
             {
-                foreach (int idx in indices)
+                for (int i = 0; i < indices.Count; i++)
                 {
-                    if (idx == -1) ndtc.Append(null);
-                    else if (dtc.IsNull(idx)) ndtc.Append(null);
+                    int idx = indices[i];
+                    if (idx == -1 || dtc.IsNull(idx)) ndtc.Append(null);
                     else ndtc.Append(dtc.Get(idx));
                 }
             }
             else
             {
-                // Fallback for unknown types (Boxing)
-                foreach (int idx in indices)
+                // Fallback
+                for (int i = 0; i < indices.Count; i++)
                 {
+                    int idx = indices[i];
                     if (idx == -1) newCol.AppendObject(null);
                     else newCol.AppendObject(source.GetValue(idx));
                 }

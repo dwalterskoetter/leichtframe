@@ -41,5 +41,42 @@ namespace LeichtFrame.Core
 
             return new DataFrame(newColumns);
         }
+
+        /// <summary>
+        /// Filters rows based on a predicate, returning a Zero-Copy View (<see cref="IndirectColumn{T}"/>).
+        /// <para>
+        /// **Performance:** Extremely fast creation (O(N) scan, 0 allocation for data). 
+        /// **Trade-off:** Subsequent read access is slower due to indirection, and Vectorized operations (SIMD) 
+        /// are not supported on the result until it is materialized.
+        /// </para>
+        /// </summary>
+        public static DataFrame WhereView(this DataFrame df, Func<RowView, bool> predicate)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            // 1. Scan (Collect indices)
+            var indicesList = new List<int>(df.RowCount / 4); // Heuristic
+            for (int i = 0; i < df.RowCount; i++)
+            {
+                var row = new RowView(i, df.Columns, df.Schema);
+                if (predicate(row))
+                {
+                    indicesList.Add(i);
+                }
+            }
+            int[] indicesArray = indicesList.ToArray();
+
+            // 2. Create Views
+            var newColumns = new List<IColumn>(df.ColumnCount);
+            foreach (var col in df.Columns)
+            {
+                // Create IndirectColumn via Reflection (Generic Factory)
+                var genericType = typeof(IndirectColumn<>).MakeGenericType(col.DataType);
+                var view = Activator.CreateInstance(genericType, col, indicesArray);
+                newColumns.Add((IColumn)view!);
+            }
+
+            return new DataFrame(newColumns);
+        }
     }
 }

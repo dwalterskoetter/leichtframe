@@ -145,40 +145,43 @@ namespace LeichtFrame.Core
 
         private static int GetIndices(StringColumn col, int n, bool smallestN, int[] resultBuffer)
         {
-            IComparer<string> comparer = smallestN
-                ? (IComparer<string>)Comparer<string>.Create((x, y) => string.CompareOrdinal(y, x))
-                : StringComparer.Ordinal;
+            var comparer = Comparer<int>.Create((x, y) =>
+            {
+                int cmp = col.CompareRaw(x, y);
+                return smallestN ? cmp * -1 : cmp;
+            });
 
-            var queue = new PriorityQueue<int, string>(n, comparer);
+            var queue = new PriorityQueue<int, int>(n, comparer);
 
             for (int i = 0; i < col.Length; i++)
             {
-                if (col.IsNull(i)) continue;
-                string val = col.Get(i)!;
-
                 if (queue.Count < n)
                 {
-                    queue.Enqueue(i, val);
+                    queue.Enqueue(i, i);
                 }
                 else
                 {
-                    if (queue.TryPeek(out int _, out string? worstVal))
-                    {
-                        bool shouldSwap = smallestN
-                            ? string.CompareOrdinal(val, worstVal) < 0
-                            : string.CompareOrdinal(val, worstVal) > 0;
+                    int worstIndex = queue.Peek();
 
-                        if (shouldSwap)
-                        {
-                            queue.Dequeue();
-                            queue.Enqueue(i, val);
-                        }
+                    int cmp = col.CompareRaw(i, worstIndex);
+
+                    bool isBetter = smallestN
+                        ? cmp < 0
+                        : cmp > 0;
+
+                    if (isBetter)
+                    {
+                        queue.Dequeue();
+                        queue.Enqueue(i, i);
                     }
                 }
             }
 
             int count = queue.Count;
-            for (int i = count - 1; i >= 0; i--) resultBuffer[i] = queue.Dequeue();
+            for (int i = count - 1; i >= 0; i--)
+            {
+                resultBuffer[i] = queue.Dequeue();
+            }
             return count;
         }
 
@@ -194,7 +197,7 @@ namespace LeichtFrame.Core
             }
             else if (col is StringColumn sc)
             {
-                Array.Sort(indices, (a, b) => (ascending ? 1 : -1) * string.CompareOrdinal(sc.Get(a), sc.Get(b)));
+                Array.Sort(indices, (a, b) => (ascending ? 1 : -1) * sc.CompareRaw(a, b));
             }
 
             return indices;

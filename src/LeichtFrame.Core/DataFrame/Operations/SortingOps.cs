@@ -130,11 +130,7 @@ namespace LeichtFrame.Core
 
             public int Compare(int x, int y)
             {
-                // StringColumn Get(i) returns null if isNull, so we rely on string comparison handling null
-                string? valX = _col.Get(x);
-                string? valY = _col.Get(y);
-
-                return string.Compare(valX, valY, StringComparison.Ordinal) * _direction;
+                return _col.CompareRaw(x, y) * _direction;
             }
         }
 

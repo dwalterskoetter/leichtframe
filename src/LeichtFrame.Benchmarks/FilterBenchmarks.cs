@@ -28,6 +28,12 @@ namespace LeichtFrame.Benchmarks
             return _lfFrame.Where(row => row.Get<int>("Id") < 50_000);
         }
 
+        [Benchmark(Description = "LeichtFrame WhereView (Zero-Copy)")]
+        public DataFrame LF_WhereView_Int()
+        {
+            return _lfFrame.WhereView(row => row.Get<int>("Id") < 50_000);
+        }
+
         [Benchmark(Description = "LeichtFrame WhereVec (Int - SIMD)")]
         public DataFrame LF_WhereVec_Int()
         {
