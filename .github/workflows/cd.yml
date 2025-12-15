@@ -11,6 +11,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   # JOB 1: NuGet Release
   nuget-release:
@@ -56,17 +59,13 @@ jobs:
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
 
-    # OUTPUT: We pass the version to the next job
     outputs:
       release_version: ${{ env.VERSION }}
 
-  # JOB 2: Docusaurus Update (calls docs.yml)
+  # JOB 2: Docusaurus Update
   update-docs:
     needs: nuget-release
-    # Calls the reusable workflow
     uses: ./.github/workflows/docs.yml
     with:
-      # We pass the version from Job 1 so the commit message is correct
       version_tag: ${{ needs.nuget-release.outputs.release_version }}
-    # Important: Inherit secrets (GITHUB_TOKEN)
     secrets: inherit
