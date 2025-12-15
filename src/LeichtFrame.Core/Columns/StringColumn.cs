@@ -217,6 +217,14 @@ namespace LeichtFrame.Core
             return spanA.SequenceCompareTo(spanB);
         }
 
+        // --- INTERNAL ACCESS FOR OPTIMIZED OPS ---
+
+        /// <summary>Internal access to raw offsets for high-performance grouping/sorting.</summary>
+        internal int[] Offsets => _offsets;
+
+        /// <summary>Internal access to raw bytes for high-performance grouping/sorting.</summary>
+        internal byte[] RawBytes => _values;
+
         // --- Null Handling ---
 
         /// <inheritdoc />
