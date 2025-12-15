@@ -1,18 +1,23 @@
 <Project>
   <PropertyGroup>
     <!-- Product Information -->
-    <Version>0.2.0-alpha</Version>
+    <Version>0.3.0-rc1</Version> 
+    
     <Authors>The LeichtFrame Authors</Authors>
     <Company>LeichtFrame Open Source</Company>
     <Product>LeichtFrame</Product>
-    <Description>A lightweight, high-performance DataFrame engine for .NET optimized for backend services.</Description>
+    
+    <Description>A high-performance, zero-allocation DataFrame engine for .NET, optimized for backend services and SIMD-accelerated analytics.</Description>
+    
     <Copyright>Copyright (c) 2025 The LeichtFrame Authors</Copyright>
 
     <!-- Links & License -->
     <RepositoryUrl>https://github.com/dwalterskoetter/leichtFrame</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>dataframe;data;analysis;csv;parquet;performance;span;memory</PackageTags>
+    
+    <PackageTags>dataframe;data;analysis;csv;parquet;arrow;simd;performance;memory;zero-allocation</PackageTags>
+    
     <PackageProjectUrl>https://github.com/dwalterskoetter/leichtFrame</PackageProjectUrl>
     
     <!-- Documentation & Warnings -->
