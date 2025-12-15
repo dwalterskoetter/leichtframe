@@ -36,5 +36,37 @@ namespace LeichtFrame.Core.Tests.Columns
             col.Append("Foo");
             col.Dispose();
         }
+
+        [Fact]
+        public void CompareRaw_Sorts_Bytes_Correctly()
+        {
+            using var col = new StringColumn("SortTest", 5, isNullable: true);
+
+            col.Append("A");        // 0
+            col.Append("B");        // 1
+            col.Append("AA");       // 2
+            col.Append("a");        // 3 (ASCII 97 > 65)
+            col.Append(null);       // 4
+
+            // 1. A < B
+            Assert.Equal(-1, Math.Sign(col.CompareRaw(0, 1)));
+
+            // 2. B > A
+            Assert.Equal(1, Math.Sign(col.CompareRaw(1, 0)));
+
+            // 3. A < AA (Prefix Logik)
+            Assert.Equal(-1, Math.Sign(col.CompareRaw(0, 2)));
+
+            // 4. A < a (Case Sensitivity: 'A'=65, 'a'=97)
+            Assert.Equal(-1, Math.Sign(col.CompareRaw(0, 3)));
+
+            // 5. Null Handling
+            // Null (4) vs A (0)
+            Assert.Equal(-1, col.CompareRaw(4, 0));
+            // A (0) vs Null (4)
+            Assert.Equal(1, col.CompareRaw(0, 4));
+            // Null vs Null -> 0
+            Assert.Equal(0, col.CompareRaw(4, 4));
+        }
     }
 }

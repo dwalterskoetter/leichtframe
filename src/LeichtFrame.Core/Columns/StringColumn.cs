@@ -188,6 +188,35 @@ namespace LeichtFrame.Core
             _length++;
         }
 
+        /// <summary>
+        /// Compares the string at indexA with the string at indexB directly on the byte buffer.
+        /// Returns -1, 0, or 1.
+        /// Zero-Allocation implementation.
+        /// </summary>
+        public int CompareRaw(int indexA, int indexB)
+        {
+            // 1. Null Handling
+            bool nullA = IsNull(indexA);
+            bool nullB = IsNull(indexB);
+
+            if (nullA && nullB) return 0;
+            if (nullA) return -1; // Null is smaller
+            if (nullB) return 1;
+
+            // 2. Get Spans (Zero-Copy pointers)
+            int startA = _offsets[indexA];
+            int lenA = _offsets[indexA + 1] - startA;
+            ReadOnlySpan<byte> spanA = _values.AsSpan(startA, lenA);
+
+            int startB = _offsets[indexB];
+            int lenB = _offsets[indexB + 1] - startB;
+            ReadOnlySpan<byte> spanB = _values.AsSpan(startB, lenB);
+
+            // 3. Compare Bytes directly
+            // SequenceCompareTo is an optimized .NET intrinsic method
+            return spanA.SequenceCompareTo(spanB);
+        }
+
         // --- Null Handling ---
 
         /// <inheritdoc />
