@@ -142,7 +142,7 @@ namespace LeichtFrame.Core
             else
             {
                 if (!IsNullable) throw new ArgumentNullException(nameof(value), "Column is not nullable");
-                SetNull(index);
+                _nulls?.SetNull(index);
             }
 
             // 5. Update offsets (for ALL subsequent rows!)

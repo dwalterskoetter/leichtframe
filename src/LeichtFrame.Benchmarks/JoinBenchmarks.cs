@@ -7,7 +7,6 @@ namespace LeichtFrame.Benchmarks
     {
         private LeichtFrame.Core.DataFrame _lfRight = null!;
 
-        [GlobalSetup]
         public override void GlobalSetup()
         {
             base.GlobalSetup();
@@ -15,18 +14,21 @@ namespace LeichtFrame.Benchmarks
             // ---------------------------------------------------------
             // SETUP LEICHTFRAME RIGHT SIDE
             // ---------------------------------------------------------
-
             var schemaRight = new DataFrameSchema(new[] {
                 new ColumnDefinition("UniqueId", typeof(string)),
                 new ColumnDefinition("RightVal", typeof(double))
             });
 
-            _lfRight = DataFrame.Create(schemaRight, N);
+            // We purposefully create a smaller right dataset (50% of Left)
+            // to ensure Left Join produces Nulls and Inner Join filters rows.
+            int rightCount = N / 2;
+            _lfRight = DataFrame.Create(schemaRight, rightCount);
 
             var colKey = (StringColumn)_lfRight["UniqueId"];
             var colVal = (DoubleColumn)_lfRight["RightVal"];
 
-            for (int i = 0; i < N; i++)
+            // Insert every 2nd item -> 50% match rate
+            for (int i = 0; i < N; i += 2)
             {
                 colKey.Append(_pocoList[i].UniqueId);
                 colVal.Append(_pocoList[i].Val * 2);
@@ -41,7 +43,7 @@ namespace LeichtFrame.Benchmarks
 
             using (var appender = _duckConnection.CreateAppender("BenchDataRight"))
             {
-                for (int i = 0; i < N; i++)
+                for (int i = 0; i < N; i += 2)
                 {
                     var row = appender.CreateRow();
                     row.AppendValue(_pocoList[i].UniqueId);
@@ -51,20 +53,20 @@ namespace LeichtFrame.Benchmarks
             }
         }
 
-        [GlobalCleanup]
         public override void GlobalCleanup()
         {
             _lfRight?.Dispose();
             base.GlobalCleanup();
         }
 
-        // --- BENCHMARKS ---
+        // =========================================================
+        // INNER JOIN
+        // =========================================================
 
-        [Benchmark(Baseline = true, Description = "DuckDB Join (Count)")]
-        public long DuckDB_Join()
+        [Benchmark(Baseline = true, Description = "DuckDB Inner Join")]
+        public long DuckDB_InnerJoin()
         {
             using var cmd = _duckConnection.CreateCommand();
-
             cmd.CommandText = @"
                 SELECT COUNT(*) 
                 FROM BenchData 
@@ -73,10 +75,32 @@ namespace LeichtFrame.Benchmarks
             return (long)cmd.ExecuteScalar()!;
         }
 
-        [Benchmark(Description = "LeichtFrame Join")]
-        public DataFrame LF_Join()
+        [Benchmark(Description = "LeichtFrame Inner Join")]
+        public DataFrame LF_InnerJoin()
         {
             return _lfFrame.Join(_lfRight, "UniqueId", JoinType.Inner);
+        }
+
+        // =========================================================
+        // LEFT JOIN
+        // =========================================================
+
+        [Benchmark(Description = "DuckDB Left Join")]
+        public long DuckDB_LeftJoin()
+        {
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT COUNT(*) 
+                FROM BenchData 
+                LEFT JOIN BenchDataRight ON BenchData.UniqueId = BenchDataRight.UniqueId";
+
+            return (long)cmd.ExecuteScalar()!;
+        }
+
+        [Benchmark(Description = "LeichtFrame Left Join")]
+        public DataFrame LF_LeftJoin()
+        {
+            return _lfFrame.Join(_lfRight, "UniqueId", JoinType.Left);
         }
     }
 }
