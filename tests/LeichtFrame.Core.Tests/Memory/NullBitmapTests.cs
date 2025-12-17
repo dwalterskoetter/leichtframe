@@ -1,3 +1,5 @@
+using LeichtFrame.Core.Engine;
+
 namespace LeichtFrame.Core.Tests.Memory
 {
     public class NullBitmapTests
