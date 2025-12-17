@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace LeichtFrame.Core
 {
     /// <summary>
@@ -87,5 +84,22 @@ namespace LeichtFrame.Core
         /// </summary>
         /// <param name="name">The name of the column.</param>
         public object? this[string name] => GetValue(_schema.GetColumnIndex(name));
+
+        /// <summary>
+        /// Checks if the value at the specified column index is null.
+        /// </summary>
+        public bool IsNull(int columnIndex)
+        {
+            return _columns[columnIndex].IsNull(_rowIndex);
+        }
+
+        /// <summary>
+        /// Checks if the value at the specified column name is null.
+        /// </summary>
+        public bool IsNull(string columnName)
+        {
+            int index = _schema.GetColumnIndex(columnName);
+            return IsNull(index);
+        }
     }
 }
