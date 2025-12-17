@@ -17,16 +17,6 @@ namespace LeichtFrame.Core
         /// </summary>
         public static DataFrame Count(this GroupedDataFrame gdf)
         {
-            if (gdf.NativeData != null)
-            {
-                // Wir sind im God Mode! Alles gut.
-                // Console.WriteLine("GOD MODE ACTIVE"); // Optional zum Testen
-            }
-            else
-            {
-                // Wenn das hier fliegt, nutzt du eine Strategie, die managed Arrays erstellt!
-                throw new Exception("ALARM: SLOW PATH! NativeData ist null. Falsche Strategie oder alte DLLs!");
-            }
             // --- FAST PATH: Native Memory (Zero-Alloc) ---
             if (gdf.NativeData != null)
             {
