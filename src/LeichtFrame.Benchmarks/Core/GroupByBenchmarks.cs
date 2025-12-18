@@ -10,6 +10,24 @@ namespace LeichtFrame.Benchmarks
         // COUNT (Low Cardinality INT)
         // =========================================================
 
+        [Benchmark(Description = "DuckDB: GroupBy -> Reader (Stream)")]
+        public long DuckDB_Reader()
+        {
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT Id, COUNT(*) FROM BenchData GROUP BY Id";
+
+            using var reader = cmd.ExecuteReader();
+            long total = 0;
+
+            while (reader.Read())
+            {
+                int k = reader.GetInt32(0);
+                int c = reader.GetInt32(1);
+                total++;
+            }
+            return total;
+        }
+
         [Benchmark(Description = "DuckDB GroupBy Count (Int)")]
         public long DuckDB_Group_Count_Low()
         {
@@ -22,24 +40,51 @@ namespace LeichtFrame.Benchmarks
             return count;
         }
 
-        [Benchmark(Description = "LeichtFrame Stream (Zero Alloc)")]
-        public long LF_Stream()
+        [Benchmark(Description = "LF: GroupBy -> GetCountReader (Raw)")]
+        public long LF_Stream_Raw()
         {
             using var gdf = _lfFrame.GroupBy("Id");
             var reader = gdf.GetCountReader();
 
             long total = 0;
-
             while (reader.Read(out int key, out int count))
             {
                 total++;
             }
-
             return total;
         }
 
-        [Benchmark(Description = "LeichtFrame GroupBy Count (Int)")]
-        public DataFrame LF_Group_Count_Low()
+        [Benchmark(Description = "LF: GroupBy -> CountStream (Fluent)")]
+        public long LF_Stream_Fluent()
+        {
+            long total = 0;
+
+            foreach (var (key, count) in _lfFrame.GroupBy("Id").CountStream())
+            {
+                total++;
+            }
+            return total;
+        }
+
+        [Benchmark(Description = "DuckDB: GroupBy -> List (Materialized)")]
+        public List<(int, int)> DuckDB_Materialized()
+        {
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT Id, COUNT(*) FROM BenchData GROUP BY Id";
+            using var reader = cmd.ExecuteReader();
+
+            var result = new List<(int, int)>();
+
+            while (reader.Read())
+            {
+                result.Add((reader.GetInt32(0), reader.GetInt32(1)));
+            }
+
+            return result;
+        }
+
+        [Benchmark(Description = "LF: GroupBy -> Count (DataFrame)")]
+        public DataFrame LF_Materialized()
         {
             return _lfFrame.GroupBy("Id").Count();
         }
