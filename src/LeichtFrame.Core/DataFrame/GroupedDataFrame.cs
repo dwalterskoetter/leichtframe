@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using LeichtFrame.Core.Logic;
+using LeichtFrame.Core.Engine;
 
 namespace LeichtFrame.Core
 {
@@ -7,21 +7,6 @@ namespace LeichtFrame.Core
     /// Represents the result of a GroupBy operation.
     /// This abstract base class holds references to the source data and manages the lifecycle of native resources.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Performance Architecture:</b><br/>
-    /// This class operates in two modes:
-    /// <list type="number">
-    /// <item>
-    ///     <description><b>Native Mode (Fast Path):</b> Uses <see cref="NativeData"/> (unmanaged memory) to store indices and offsets. 
-    ///     Aggregations like <c>.Count()</c> or <c>.Sum()</c> access this directly without allocation (Zero-Copy).</description>
-    /// </item>
-    /// <item>
-    ///     <description><b>Managed Mode (Fallback):</b> Stores data in standard C# arrays. Used for string grouping or complex types.</description>
-    /// </item>
-    /// </list>
-    /// </para>
-    /// </remarks>
     public abstract class GroupedDataFrame : IDisposable
     {
         /// <summary>
@@ -30,13 +15,12 @@ namespace LeichtFrame.Core
         public DataFrame Source { get; }
 
         /// <summary>
-        /// Gets the name of the column used for grouping.
+        /// Gets the names of the columns used for grouping.
         /// </summary>
-        public string GroupColumnName { get; }
+        public string[] GroupColumnNames { get; }
 
         /// <summary>
         /// Internal reference to unmanaged memory containing the grouping results (CSR format).
-        /// <br/>
         /// If this is not null, the "Fast Path" is active.
         /// </summary>
         internal NativeGroupedData? NativeData { get; set; }
@@ -45,12 +29,12 @@ namespace LeichtFrame.Core
         /// Initializes a new instance of the <see cref="GroupedDataFrame"/> class.
         /// </summary>
         /// <param name="source">The source DataFrame.</param>
-        /// <param name="groupColumnName">The grouping column name.</param>
-        /// <param name="nativeData">Optional pointer to native data. Must be internal to match the visibility of NativeGroupedData.</param>
-        internal GroupedDataFrame(DataFrame source, string groupColumnName, NativeGroupedData? nativeData)
+        /// <param name="groupColumnNames">The names of the grouping columns.</param>
+        /// <param name="nativeData">Optional pointer to native data.</param>
+        internal GroupedDataFrame(DataFrame source, string[] groupColumnNames, NativeGroupedData? nativeData)
         {
             Source = source;
-            GroupColumnName = groupColumnName;
+            GroupColumnNames = groupColumnNames;
             NativeData = nativeData;
         }
 
@@ -62,23 +46,11 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Gets the group offsets for Compressed Sparse Row (CSR) iteration.
         /// </summary>
-        /// <remarks>
-        /// <b>Performance Warning:</b><br/>
-        /// If this instance is in <b>Native Mode</b>, accessing this property triggers a 
-        /// <see cref="Marshal.Copy(IntPtr, int[], int, int)"/>. This allocates a new managed array and copies memory.
-        /// <br/>
-        /// For high performance, use the aggregation extension methods (.Sum, .Count) which bypass this property.
-        /// </remarks>
         public abstract int[] GroupOffsets { get; }
 
         /// <summary>
         /// Gets the row indices sorted by group (CSR Values).
         /// </summary>
-        /// <remarks>
-        /// <b>Performance Warning:</b><br/>
-        /// If this instance is in <b>Native Mode</b>, accessing this property triggers a 
-        /// <see cref="Marshal.Copy(IntPtr, int[], int, int)"/>. This allocates a new managed array (size of RowCount) and copies memory.
-        /// </remarks>
         public abstract int[] RowIndices { get; }
 
         /// <summary>
@@ -99,45 +71,44 @@ namespace LeichtFrame.Core
         {
             NativeData?.Dispose();
             NativeData = null;
+            GC.SuppressFinalize(this);
         }
     }
 
     /// <summary>
     /// A strongly-typed implementation of <see cref="GroupedDataFrame"/> for a specific key type.
+    /// Primarily used for single-column grouping strategies.
     /// </summary>
     /// <typeparam name="TKey">The type of the grouping key (e.g., int, string).</typeparam>
     public class GroupedDataFrame<TKey> : GroupedDataFrame
     {
-        // Cache fields for Managed Fallback or Lazy Materialization
         private TKey[]? _keys;
         private int[]? _groupOffsets;
         private int[]? _rowIndices;
-        private int[]? _nullGroupIndices;
+        private readonly int[]? _nullGroupIndices;
 
         /// <summary>
-        /// <b>FAST PATH CONSTRUCTOR.</b>
-        /// Initializes a new instance using unmanaged memory.
+        /// Initializes a new instance using unmanaged memory (Fast Path).
         /// </summary>
         /// <param name="df">The source DataFrame.</param>
-        /// <param name="colName">The column name.</param>
-        /// <param name="nativeData">The unmanaged data structure holding indices and offsets.</param>
-        internal GroupedDataFrame(DataFrame df, string colName, NativeGroupedData nativeData)
-            : base(df, colName, nativeData)
+        /// <param name="colNames">The column names.</param>
+        /// <param name="nativeData">The unmanaged data structure.</param>
+        internal GroupedDataFrame(DataFrame df, string[] colNames, NativeGroupedData nativeData)
+            : base(df, colNames, nativeData)
         {
         }
 
         /// <summary>
-        /// <b>SLOW PATH CONSTRUCTOR.</b>
-        /// Initializes a new instance using managed arrays.
+        /// Initializes a new instance using managed arrays (Slow Path / Fallback).
         /// </summary>
         /// <param name="df">The source DataFrame.</param>
-        /// <param name="colName">The column name.</param>
+        /// <param name="colNames">The column names.</param>
         /// <param name="keys">The group keys.</param>
         /// <param name="offsets">The CSR offsets.</param>
         /// <param name="indices">The CSR row indices.</param>
         /// <param name="nullIndices">Optional indices for null values.</param>
-        public GroupedDataFrame(DataFrame df, string colName, TKey[] keys, int[] offsets, int[] indices, int[]? nullIndices)
-            : base(df, colName, null)
+        public GroupedDataFrame(DataFrame df, string[] colNames, TKey[] keys, int[] offsets, int[] indices, int[]? nullIndices)
+            : base(df, colNames, null)
         {
             _keys = keys;
             _groupOffsets = offsets;
@@ -148,41 +119,40 @@ namespace LeichtFrame.Core
         /// <inheritdoc />
         public override int GroupCount => NativeData?.GroupCount ?? _keys!.Length;
 
-        /// <inheritdoc cref="GroupedDataFrame.GroupOffsets"/>
+        /// <inheritdoc />
         public override int[] GroupOffsets
         {
             get
             {
-                // Lazy Loading: Wir erstellen das Array nur, wenn jemand es wirklich haben will.
+                // Lazy loading: Copy from native memory only if requested as managed array.
                 if (_groupOffsets == null && NativeData != null)
                 {
-                    _groupOffsets = new int[NativeData.GroupCount + 1];
-
-                    // UNSAFE: Notwendig für den Zugriff auf den Pointer
+                    // FIXED: Replaced .ToArray() with explicit Marshal.Copy
+                    int count = NativeData.GroupCount + 1; // Offsets length is GroupCount + 1
+                    _groupOffsets = new int[count];
                     unsafe
                     {
-                        // Performance Hit: Hier wird kopiert!
-                        Marshal.Copy((nint)NativeData.Offsets.Ptr, _groupOffsets, 0, NativeData.GroupCount + 1);
+                        Marshal.Copy((nint)NativeData.Offsets.Ptr, _groupOffsets, 0, count);
                     }
                 }
                 return _groupOffsets!;
             }
         }
 
-        /// <inheritdoc cref="GroupedDataFrame.RowIndices"/>
+        /// <inheritdoc />
         public override int[] RowIndices
         {
             get
             {
-                // Lazy Loading
+                // Lazy loading: Copy from native memory only if requested.
                 if (_rowIndices == null && NativeData != null)
                 {
-                    _rowIndices = new int[NativeData.RowCount];
-
+                    // FIXED: Replaced .ToArray() with explicit Marshal.Copy
+                    int count = NativeData.RowCount;
+                    _rowIndices = new int[count];
                     unsafe
                     {
-                        // Performance Hit: Hier wird kopiert (O(N) Allocation)!
-                        Marshal.Copy((nint)NativeData.Indices.Ptr, _rowIndices, 0, NativeData.RowCount);
+                        Marshal.Copy((nint)NativeData.Indices.Ptr, _rowIndices, 0, count);
                     }
                 }
                 return _rowIndices!;
@@ -192,21 +162,18 @@ namespace LeichtFrame.Core
         /// <inheritdoc />
         public override int[]? NullGroupIndices => _nullGroupIndices;
 
-        /// <summary>
-        /// Returns the keys array. Lazily materializes from native memory if required.
-        /// </summary>
-        /// <exception cref="InvalidOperationException">Thrown if NativeData is present but TKey is not int.</exception>
+        /// <inheritdoc />
         public override Array GetKeys()
         {
             if (_keys == null && NativeData != null)
             {
-                // Native Mapping: Aktuell unterstützt die Engine nur INT für Native Grouping.
                 if (typeof(TKey) == typeof(int))
                 {
-                    int[] intKeys = new int[NativeData.GroupCount];
+                    int count = NativeData.GroupCount;
+                    int[] intKeys = new int[count];
                     unsafe
                     {
-                        Marshal.Copy((nint)NativeData.Keys.Ptr, intKeys, 0, NativeData.GroupCount);
+                        Marshal.Copy((nint)NativeData.Keys.Ptr, intKeys, 0, count);
                     }
                     _keys = (TKey[])(object)intKeys;
                 }

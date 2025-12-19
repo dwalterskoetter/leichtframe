@@ -148,5 +148,51 @@ namespace LeichtFrame.Core
         {
             // We do not own the source, so we do NOT dispose it.
         }
+
+        // --- Aggregation Interface Implementation (Not Supported yet) ---
+
+        /// <summary>
+        /// Not supported for IndirectColumn.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeSum(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
+
+        /// <summary>
+        /// Not supported for IndirectColumn.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeMean(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
+
+        /// <summary>
+        /// Not supported for IndirectColumn.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeMin(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
+
+        /// <summary>
+        /// Not supported for IndirectColumn.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeMax(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
     }
 }

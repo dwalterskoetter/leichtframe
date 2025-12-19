@@ -45,5 +45,29 @@ namespace LeichtFrame.Core.Tests.DataFrames.Operations
 
             Assert.Equal(20, res.Get(0));
         }
+
+        [Fact]
+        public void Divide_Int_By_Zero_Throws()
+        {
+            using var c1 = new IntColumn("A", 1);
+            c1.Append(10);
+
+            // Act & Assert
+            Assert.Throws<DivideByZeroException>(() =>
+            {
+                var res = c1 / 0;
+            });
+        }
+
+        [Fact]
+        public void Divide_Double_By_Zero_Returns_Infinity()
+        {
+            using var c1 = new DoubleColumn("A", 1);
+            c1.Append(10.0);
+
+            using var res = c1 / 0.0;
+
+            Assert.True(double.IsPositiveInfinity(res.Get(0)));
+        }
     }
 }

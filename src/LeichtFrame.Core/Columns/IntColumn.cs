@@ -415,5 +415,146 @@ namespace LeichtFrame.Core
             }
             return result;
         }
+
+        // =======================================================================
+        // AGGREGATION ENGINE IMPLEMENTATION
+        // =======================================================================
+
+        /// <inheritdoc />
+        public override object? ComputeSum(int[] indices, int start, int end)
+        {
+            long sum = 0;
+            var data = _data; // Local ref for performance optimization
+
+            if (!IsNullable)
+            {
+                // Non-nullable path: tight loop
+                for (int i = start; i < end; i++)
+                {
+                    sum += data[indices[i]];
+                }
+            }
+            else
+            {
+                // Nullable path: check null bitmap
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx))
+                    {
+                        sum += data[idx];
+                    }
+                }
+            }
+            return sum;
+        }
+
+        /// <inheritdoc />
+        public override object? ComputeMean(int[] indices, int start, int end)
+        {
+            long sum = 0;
+            int count = 0;
+            var data = _data;
+
+            if (!IsNullable)
+            {
+                count = end - start;
+                if (count == 0) return null;
+
+                for (int i = start; i < end; i++)
+                {
+                    sum += data[indices[i]];
+                }
+            }
+            else
+            {
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx))
+                    {
+                        sum += data[idx];
+                        count++;
+                    }
+                }
+                if (count == 0) return null;
+            }
+
+            return (double)sum / count;
+        }
+
+        /// <inheritdoc />
+        public override object? ComputeMin(int[] indices, int start, int end)
+        {
+            if (start == end) return null;
+
+            int min = int.MaxValue;
+            bool hasValue = false;
+            var data = _data;
+
+            if (!IsNullable)
+            {
+                for (int i = start; i < end; i++)
+                {
+                    int val = data[indices[i]];
+                    if (val < min) min = val;
+                }
+                hasValue = true;
+            }
+            else
+            {
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx))
+                    {
+                        int val = data[idx];
+                        if (val < min) min = val;
+                        hasValue = true;
+                    }
+                }
+            }
+
+            return hasValue ? min : null;
+        }
+
+        /// <inheritdoc />
+        public override object? ComputeMax(int[] indices, int start, int end)
+        {
+            if (start == end) return null;
+
+            int max = int.MinValue;
+            bool hasValue = false;
+            var data = _data;
+
+            if (!IsNullable)
+            {
+                for (int i = start; i < end; i++)
+                {
+                    int val = data[indices[i]];
+                    if (val > max) max = val;
+                }
+                hasValue = true;
+            }
+            else
+            {
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx))
+                    {
+                        int val = data[idx];
+                        if (val > max) max = val;
+                        hasValue = true;
+                    }
+                }
+            }
+
+            return hasValue ? max : null;
+        }
     }
 }

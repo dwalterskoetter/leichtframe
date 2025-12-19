@@ -53,4 +53,35 @@ public abstract class Column : IColumn
 
     /// <inheritdoc />
     public abstract void SetNull(int index);
+
+    // =======================================================================
+    // DEFAULT AGGREGATION IMPLEMENTATION (Fallback)
+    // =======================================================================
+
+    /// <inheritdoc />
+    public virtual object? ComputeSum(int[] indices, int start, int end)
+    {
+        // Standard: Nicht unterstützt (z.B. für StringColumn oder SlicedColumn ohne Optimierung)
+        throw new NotSupportedException($"Sum aggregation is not supported or optimized for column type '{GetType().Name}'.");
+    }
+
+    /// <inheritdoc />
+    public virtual object? ComputeMean(int[] indices, int start, int end)
+    {
+        throw new NotSupportedException($"Mean aggregation is not supported or optimized for column type '{GetType().Name}'.");
+    }
+
+    /// <inheritdoc />
+    public virtual object? ComputeMin(int[] indices, int start, int end)
+    {
+        // Min/Max könnten theoretisch generisch implementiert werden, 
+        // aber für Performance verlassen wir uns auf die konkreten Klassen.
+        throw new NotSupportedException($"Min aggregation is not supported or optimized for column type '{GetType().Name}'.");
+    }
+
+    /// <inheritdoc />
+    public virtual object? ComputeMax(int[] indices, int start, int end)
+    {
+        throw new NotSupportedException($"Max aggregation is not supported or optimized for column type '{GetType().Name}'.");
+    }
 }

@@ -44,6 +44,7 @@ namespace LeichtFrame.Benchmarks
             if (!File.Exists(FilePath))
                 throw new FileNotFoundException($"Datei nicht gefunden: {FilePath}");
 
+            // 1. LeichtFrame Setup
             var schema = new DataFrameSchema(new[]
             {
                 new ColumnDefinition("l_quantity", typeof(double), SourceIndex: 4),
@@ -62,6 +63,7 @@ namespace LeichtFrame.Benchmarks
                 HasTrailingDelimiter = true
             });
 
+            // 2. DuckDB Setup
             _duckDbConnection = new DuckDBConnection("DataSource=:memory:");
             _duckDbConnection.Open();
 
@@ -88,34 +90,43 @@ namespace LeichtFrame.Benchmarks
                         'l_shipinstruct': 'VARCHAR', 
                         'l_shipmode': 'VARCHAR', 
                         'l_comment': 'VARCHAR',
-                        'empty_trash': 'VARCHAR'
+                        'dummy_end': 'VARCHAR' 
                     }});";
             cmd.ExecuteNonQuery();
 
             Console.WriteLine($"Benchmarks bereit. Datensätze: {_lineItemDf.RowCount:N0}");
         }
 
-        [Benchmark(Description = "LF Q1: Pricing Summary (Nutzerfreundlich)")]
+        [Benchmark(Description = "LF Q1: New Engine (Single Pass)")]
         public DataFrame RunQ1LeichtFrame()
         {
+            // --- STEP 1: Filter ---
             var filtered = _lineItemDf.Where(row => row.Get<DateTime>("l_shipdate") <= _targetDate);
 
+            // --- STEP 2: Calculation (Vectorized) ---
             var withCharge = filtered
                 .AddColumn("disc_price", row => row.Get<double>("l_extendedprice") * (1.0 - row.Get<double>("l_discount")))
                 .AddColumn("charge", row => row.Get<double>("l_extendedprice") * (1.0 - row.Get<double>("l_discount")) * (1.0 + row.Get<double>("l_tax")));
 
+            // --- STEP 3: Group Key Generation ---
+            // (Workaround: String Concatenation until MultiColumnHashStrategy got implemented)
             var groupedDf = withCharge.AddColumn("group_key", row =>
                 row.Get<string>("l_returnflag") + row.Get<string>("l_linestatus"));
 
+            // --- STEP 4: Aggregation (The New Engine) ---
             using var gdf = groupedDf.GroupBy("group_key");
 
-            return gdf.Sum("l_quantity")
-                .Join(gdf.Sum("l_extendedprice"), "group_key")
-                .Join(gdf.Sum("disc_price"), "group_key")
-                .Join(gdf.Sum("charge"), "group_key")
-                .Join(gdf.Mean("l_quantity"), "group_key")
-                .Join(gdf.Count(), "group_key")
-                .OrderBy("group_key");
+            return gdf.Aggregate(
+                Agg.Sum("l_quantity", "sum_qty"),
+                Agg.Sum("l_extendedprice", "sum_base_price"),
+                Agg.Sum("disc_price", "sum_disc_price"),
+                Agg.Sum("charge", "sum_charge"),
+                Agg.Mean("l_quantity", "avg_qty"),
+                Agg.Mean("l_extendedprice", "avg_price"),
+                Agg.Mean("l_discount", "avg_disc"),
+                Agg.Count("count_order")
+            )
+            .OrderBy("group_key");
         }
 
         [Benchmark(Description = "DuckDB Q1: Pricing Summary (SQL)")]

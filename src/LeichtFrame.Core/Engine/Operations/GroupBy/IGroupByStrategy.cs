@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     internal interface IGroupByStrategy
     {

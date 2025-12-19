@@ -164,5 +164,51 @@ namespace LeichtFrame.Core
             if ((uint)index >= (uint)_length)
                 throw new IndexOutOfRangeException($"Index {index} is out of slice bounds (Length {_length})");
         }
+
+        // --- Aggregation Interface Implementation (Not Supported for Slices yet) ---
+
+        /// <summary>
+        /// Computes the sum for a subset of rows defined by indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeSum(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
+
+        /// <summary>
+        /// Computes the mean for a subset of rows defined by indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeMean(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
+
+        /// <summary>
+        /// Finds the minimum value for a subset of rows defined by indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeMin(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
+
+        /// <summary>
+        /// Finds the maximum value for a subset of rows defined by indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public object? ComputeMax(int[] indices, int start, int end)
+            => throw new NotSupportedException($"Aggregation not supported on {GetType().Name}");
     }
 }
