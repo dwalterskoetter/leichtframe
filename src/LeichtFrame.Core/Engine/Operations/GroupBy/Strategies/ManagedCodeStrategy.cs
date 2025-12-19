@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using LeichtFrame.Core.Engine;
 
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     /// <summary>
     /// The existing implementation: Safe Managed Code.
@@ -42,7 +41,7 @@ namespace LeichtFrame.Core.Logic
             }
             var csr = map.ToCSR();
             map.Dispose();
-            return new GroupedDataFrame<T>(df, columnName, csr.Keys, csr.GroupOffsets, csr.RowIndices, nullIndices.Count > 0 ? nullIndices.ToArray() : null);
+            return new GroupedDataFrame<T>(df, new[] { columnName }, csr.Keys, csr.GroupOffsets, csr.RowIndices, nullIndices.Count > 0 ? nullIndices.ToArray() : null);
         }
 
         private GroupedDataFrame GroupByString(DataFrame df, string columnName)
@@ -92,7 +91,7 @@ namespace LeichtFrame.Core.Logic
 
             var csr = map.ToCSR();
             map.Dispose();
-            return new GroupedDataFrame<string>(df, columnName, csr.Keys, csr.Offsets, csr.Indices, nullIndices.Count > 0 ? nullIndices.ToArray() : null);
+            return new GroupedDataFrame<string>(df, new[] { columnName }, csr.Keys, csr.Offsets, csr.Indices, nullIndices.Count > 0 ? nullIndices.ToArray() : null);
         }
 
         private GroupedDataFrame GroupByStringParallel(DataFrame df, string columnName)
@@ -203,7 +202,7 @@ namespace LeichtFrame.Core.Logic
                 keyOffset += pGroupCount;
                 indexOffset += pIndices.Length;
             }
-            return new GroupedDataFrame<string>(df, columnName, finalKeys, finalOffsets, finalIndices, !nullIndices.IsEmpty ? nullIndices.ToArray() : null);
+            return new GroupedDataFrame<string>(df, new[] { columnName }, finalKeys, finalOffsets, finalIndices, !nullIndices.IsEmpty ? nullIndices.ToArray() : null);
         }
     }
 }

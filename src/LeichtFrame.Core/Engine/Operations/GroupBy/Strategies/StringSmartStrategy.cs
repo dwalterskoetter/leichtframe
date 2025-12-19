@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using LeichtFrame.Core.Engine;
 
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     internal class StringSmartStrategy : IGroupByStrategy
     {
@@ -19,7 +18,6 @@ namespace LeichtFrame.Core.Logic
             }
 
             // 2. Sampling: Prüfe Kardinalität
-            // Wenn viele Strings gleich sind (Low Card), lohnt Parallelisierung oft nicht (Locking).
             if (ShouldUseParallelStringProcessing(col))
             {
                 return GroupParallel(df, columnName, col);
@@ -40,7 +38,6 @@ namespace LeichtFrame.Core.Logic
             {
                 string? val = col.Get(i);
                 if (val != null && uniqueSampler.Add(val)) uniqueCount++;
-                // Wenn wir > 20% Varianz in den ersten 100 Rows sehen -> Parallel.
                 if (uniqueCount > 20) return true;
             }
             return false;
@@ -48,7 +45,6 @@ namespace LeichtFrame.Core.Logic
 
         private GroupedDataFrame GroupSequential(DataFrame df, string colName, StringColumn col)
         {
-            // Engine: StringKeyMap
             var map = new StringKeyMap(col.RawBytes, col.Offsets, Math.Max(128, df.RowCount / 100), df.RowCount);
             var nullIndices = new List<int>();
 
@@ -61,8 +57,9 @@ namespace LeichtFrame.Core.Logic
             var csr = map.ToCSR();
             map.Dispose();
 
+            // FIX: new[] { colName } statt colName
             return new GroupedDataFrame<string>(
-                df, colName, csr.Keys, csr.Offsets, csr.Indices,
+                df, new[] { colName }, csr.Keys, csr.Offsets, csr.Indices,
                 nullIndices.Count > 0 ? nullIndices.ToArray() : null
             );
         }
@@ -74,7 +71,6 @@ namespace LeichtFrame.Core.Logic
             byte[] rawBytes = col.RawBytes;
             int[] offsets = col.Offsets;
 
-            // Partitioning buffers
             var globalBuckets = new List<int>[partitionCount];
             for (int i = 0; i < partitionCount; i++) globalBuckets[i] = new List<int>(rowCount / partitionCount);
             var globalLocks = new object[partitionCount];
@@ -96,7 +92,6 @@ namespace LeichtFrame.Core.Logic
                 {
                     if (col.IsNull(i)) { nullIndices.Add(i); continue; }
 
-                    // Manuelles Hashing auf den Rohdaten (ohne String Alloc)
                     int start = offsets[i];
                     int end = offsets[i + 1];
                     int hash = -2128831035;
@@ -148,7 +143,6 @@ namespace LeichtFrame.Core.Logic
                     partialResults[p] = (Array.Empty<string>(), new int[] { 0 }, Array.Empty<int>());
                     return;
                 }
-                // Hier nutzen wir wieder die Engine-Collection!
                 var map = new StringKeyMap(rawBytes, offsets, indices.Count, indices.Count);
                 for (int k = 0; k < indices.Count; k++) map.AddRow(indices[k], k);
                 partialResults[p] = map.ToCSR();
@@ -175,7 +169,6 @@ namespace LeichtFrame.Core.Logic
                 Array.Copy(pKeys, 0, finalKeys, keyOffset, pGroupCount);
                 var currentBucket = globalBuckets[p];
 
-                // Indizes mappen (Local Partition Index -> Global Row Index)
                 for (int j = 0; j < pIndices.Length; j++)
                     finalIndices[indexOffset + j] = currentBucket[pIndices[j]];
 
@@ -189,8 +182,9 @@ namespace LeichtFrame.Core.Logic
                 indexOffset += pIndices.Length;
             }
 
+            // FIX: new[] { colName } statt colName
             return new GroupedDataFrame<string>(
-                df, colName, finalKeys, finalOffsets, finalIndices,
+                df, new[] { colName }, finalKeys, finalOffsets, finalIndices,
                 !nullIndices.IsEmpty ? nullIndices.ToArray() : null
             );
         }

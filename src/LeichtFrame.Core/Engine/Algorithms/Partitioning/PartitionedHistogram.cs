@@ -23,7 +23,7 @@ namespace LeichtFrame.Core.Engine
 
                 int i = start;
 
-                // UNROLLING: 4x pro Loop (reduziert Branch Prediction Overhead)
+                // UNROLLING: 4x per Loop (reduces Branch Prediction Overhead)
                 int endUnroll = end - 4;
                 while (i < endUnroll)
                 {
@@ -46,7 +46,7 @@ namespace LeichtFrame.Core.Engine
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static void ScatterIndices(
             int* pInput,
-            int* pFinalIndices, // Ziel
+            int* pFinalIndices, // Goal
             int* pWriteOffsets, // Cache
             int length,
             int min,
@@ -62,10 +62,6 @@ namespace LeichtFrame.Core.Engine
                 int* pLocalWriteOffsets = pWriteOffsets + (t * bucketCount);
 
                 int i = start;
-
-                // Wir nutzen hier normale Writes, da Scatter random access ist.
-                // Non-Temporal Stores bringen hier nichts, da wir wild springen (pLocalWriteOffsets[bucket]).
-                // Aber Unrolling hilft.
 
                 int endUnroll = end - 4;
                 while (i < endUnroll)

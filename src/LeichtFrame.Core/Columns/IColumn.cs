@@ -66,6 +66,29 @@ namespace LeichtFrame.Core
         /// <param name="indices">The list of row indices to copy.</param>
         /// <returns>A new column containing the subset of data.</returns>
         IColumn CloneSubset(IReadOnlyList<int> indices);
+
+        /// <summary>
+        /// Computes the sum for a subset of rows defined by indices.
+        /// </summary>
+        /// <param name="indices">The global index array.</param>
+        /// <param name="start">Start offset in the index array.</param>
+        /// <param name="end">End offset in the index array.</param>
+        object? ComputeSum(int[] indices, int start, int end);
+
+        /// <summary>
+        /// Computes the mean for a subset of rows defined by indices.
+        /// </summary>
+        object? ComputeMean(int[] indices, int start, int end);
+
+        /// <summary>
+        /// Finds the minimum value for a subset of rows defined by indices.
+        /// </summary>
+        object? ComputeMin(int[] indices, int start, int end);
+
+        /// <summary>
+        /// Finds the maximum value for a subset of rows defined by indices.
+        /// </summary>
+        object? ComputeMax(int[] indices, int start, int end);
     }
 
     /// <summary>

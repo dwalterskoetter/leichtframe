@@ -1,19 +1,19 @@
 using System.Runtime.CompilerServices;
-using LeichtFrame.Core.Logic;
+using LeichtFrame.Core.Engine;
 
 namespace LeichtFrame.Core
 {
     /// <summary>
     /// Reader for fast streaming of Group Key / Count pairs from NativeGroupedData.
     /// </summary>
-    public unsafe ref struct NativeGroupCountReader
+    public unsafe ref struct NativeGroupCountEnumerator
     {
         private int* _pKey;
         private int* _pNextOffset;
         private readonly int* _pEnd;
         private int _cachedStartOffset;
 
-        internal NativeGroupCountReader(NativeGroupedData data)
+        internal NativeGroupCountEnumerator(NativeGroupedData data)
         {
             _pKey = data.Keys.Ptr;
             _pEnd = data.Keys.Ptr + data.GroupCount;
@@ -62,10 +62,10 @@ namespace LeichtFrame.Core
         /// <param name="gdf"></param>
         /// <returns></returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public static NativeGroupCountReader GetCountReader(this GroupedDataFrame gdf)
+        public static NativeGroupCountEnumerator GetCountReader(this GroupedDataFrame gdf)
         {
             if (gdf.NativeData == null) throw new InvalidOperationException("Slow Path!");
-            return new NativeGroupCountReader(gdf.NativeData);
+            return new NativeGroupCountEnumerator(gdf.NativeData);
         }
     }
 }

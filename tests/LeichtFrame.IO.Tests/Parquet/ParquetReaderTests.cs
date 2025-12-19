@@ -114,5 +114,32 @@ namespace LeichtFrame.IO.Tests
                 if (File.Exists(path)) File.Delete(path);
             }
         }
+
+        [Fact]
+        public async Task ReadAsync_Does_Not_Deadlock()
+        {
+            string path = Path.GetTempFileName();
+
+            var schema = new Parquet.Schema.ParquetSchema(new Parquet.Schema.DataField<int>("Id"));
+            using (var writeStream = File.OpenWrite(path))
+            using (var writer = await Parquet.ParquetWriter.CreateAsync(schema, writeStream))
+            using (var gw = writer.CreateRowGroup())
+            {
+                await gw.WriteColumnAsync(new Parquet.Data.DataColumn(schema.DataFields[0], new int[] { 1 }));
+            }
+
+            try
+            {
+                using var stream = File.OpenRead(path);
+                var df = await ParquetReader.ReadAsync(stream);
+
+                Assert.NotNull(df);
+                Assert.Equal(1, df.RowCount);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 using System.Buffers;
 
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     internal class IntDirectMapStrategy : IGroupByStrategy
     {
@@ -104,7 +104,7 @@ namespace LeichtFrame.Core.Logic
 
             return new GroupedDataFrame<int>(
                 df,
-                columnName,
+                new[] { columnName },
                 keys,
                 offsets,
                 indices,

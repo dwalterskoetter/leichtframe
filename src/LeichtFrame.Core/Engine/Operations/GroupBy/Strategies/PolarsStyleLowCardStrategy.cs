@@ -1,7 +1,6 @@
-using LeichtFrame.Core.Engine;
 using System.Runtime.InteropServices;
 
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     internal unsafe class PolarsStyleLowCardStrategy : IGroupByStrategy
     {
@@ -25,7 +24,7 @@ namespace LeichtFrame.Core.Logic
             // Wir übergeben den Besitz (Ownership) an den DataFrame.
             // Der DataFrame ruft Dispose() auf nativeData auf, wenn er selbst disposed wird (nach Aggregation).
 
-            return new GroupedDataFrame<int>(df, columnName, nativeData);
+            return new GroupedDataFrame<int>(df, new[] { columnName }, nativeData);
         }
 
         internal NativeGroupedData ComputeNative(IntColumn col, int rowCount)

@@ -1,6 +1,4 @@
-using LeichtFrame.Core.Engine;
-
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     /// <summary>
     /// Hält das Ergebnis eines GroupBy im unmanaged Memory.

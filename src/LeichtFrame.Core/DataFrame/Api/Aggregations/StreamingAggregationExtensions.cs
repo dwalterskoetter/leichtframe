@@ -42,7 +42,7 @@ namespace LeichtFrame.Core
     /// </summary>
     public ref struct GroupCountEnumerator
     {
-        private NativeGroupCountReader _reader;
+        private NativeGroupCountEnumerator _reader;
         private readonly GroupedDataFrame _gdf;
         private int _currentKey;
         private int _currentCount;

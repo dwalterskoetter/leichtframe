@@ -1,6 +1,4 @@
-using LeichtFrame.Core.Engine;
-
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     /// <summary>
     /// Fallback strategy for types that don't have specialized high-performance solvers (like Double, Long, Bool, DateTime).
@@ -46,7 +44,7 @@ namespace LeichtFrame.Core.Logic
 
             return new GroupedDataFrame<T>(
                 df,
-                columnName,
+                new[] { columnName },
                 csr.Keys,
                 csr.GroupOffsets,
                 csr.RowIndices,

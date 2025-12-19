@@ -357,5 +357,130 @@ namespace LeichtFrame.Core
             }
             return result;
         }
+
+        /// <summary>
+        /// Computes the sum over a subset of indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        public override object? ComputeSum(int[] indices, int start, int end)
+        {
+            double sum = 0;
+            var data = _data;
+
+            if (!IsNullable)
+            {
+                for (int i = start; i < end; i++) sum += data[indices[i]];
+            }
+            else
+            {
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx)) sum += data[idx];
+                }
+            }
+            return sum;
+        }
+
+        /// <summary>
+        /// Computes the mean over a subset of indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        public override object? ComputeMean(int[] indices, int start, int end)
+        {
+            int count = end - start;
+            if (count == 0) return null;
+
+            // Summe berechnen (wir rufen intern die Logik von oben ab oder kopieren sie für Speed)
+            double sum = (double)(ComputeSum(indices, start, end) ?? 0.0);
+            return sum / count;
+        }
+
+        /// <summary>
+        /// Computes the minimum over a subset of indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        public override object? ComputeMin(int[] indices, int start, int end)
+        {
+            if (start == end) return null;
+            double min = double.MaxValue;
+            bool hasVal = false;
+            var data = _data;
+
+            if (!IsNullable)
+            {
+                for (int i = start; i < end; i++)
+                {
+                    double v = data[indices[i]];
+                    if (v < min) min = v;
+                }
+                hasVal = true;
+            }
+            else
+            {
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx))
+                    {
+                        double v = data[idx];
+                        if (v < min) min = v;
+                        hasVal = true;
+                    }
+                }
+            }
+            return hasVal ? min : null;
+        }
+
+
+        /// <summary>
+        /// Computes the maximum over a subset of indices.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        public override object? ComputeMax(int[] indices, int start, int end)
+        {
+            if (start == end) return null;
+            double max = double.MinValue;
+            bool hasVal = false;
+            var data = _data;
+
+            if (!IsNullable)
+            {
+                for (int i = start; i < end; i++)
+                {
+                    double v = data[indices[i]];
+                    if (v > max) max = v;
+                }
+                hasVal = true;
+            }
+            else
+            {
+                var nulls = _nulls!;
+                for (int i = start; i < end; i++)
+                {
+                    int idx = indices[i];
+                    if (!nulls.IsNull(idx))
+                    {
+                        double v = data[idx];
+                        if (v > max) max = v;
+                        hasVal = true;
+                    }
+                }
+            }
+            return hasVal ? max : null;
+        }
     }
 }

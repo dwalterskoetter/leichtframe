@@ -1,9 +1,8 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using LeichtFrame.Core.Engine;
 
-namespace LeichtFrame.Core.Logic
+namespace LeichtFrame.Core.Engine
 {
     /// <summary>
     /// A high-performance grouping strategy for High-Cardinality Integer columns.
@@ -64,7 +63,7 @@ namespace LeichtFrame.Core.Logic
             int length)
         {
             if (length == 0)
-                return new GroupedDataFrame<int>(df, columnName, Array.Empty<int>(), new[] { 0 }, Array.Empty<int>(), null);
+                return new GroupedDataFrame<int>(df, new[] { columnName }, Array.Empty<int>(), new[] { 0 }, Array.Empty<int>(), null);
 
             int[] tempKeys = ArrayPool<int>.Shared.Rent(length);
             int[] tempOffsets = ArrayPool<int>.Shared.Rent(length + 1);
@@ -131,7 +130,13 @@ namespace LeichtFrame.Core.Logic
                 int[] finalOffsets = new int[groupCount + 1];
                 Array.Copy(tempOffsets, finalOffsets, groupCount + 1);
 
-                return new GroupedDataFrame<int>(df, columnName, finalKeys, finalOffsets, finalIndices, null);
+                return new GroupedDataFrame<int>(
+                    df,
+                    new[] { columnName },
+                    finalKeys,
+                    finalOffsets,
+                    finalIndices,
+                    null);
             }
             finally
             {

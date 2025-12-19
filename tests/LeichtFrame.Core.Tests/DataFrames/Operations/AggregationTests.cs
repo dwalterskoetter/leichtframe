@@ -75,5 +75,46 @@ namespace LeichtFrame.Core.Tests.DataFrameTests
 
             Assert.Throws<NotSupportedException>(() => df.Sum("Str"));
         }
+
+        [Fact]
+        public void Sum_Propagation_Of_NaN()
+        {
+            var df = DataFrame.FromObjects(new[]
+            {
+                new { Val = 1.0 },
+                new { Val = double.NaN },
+                new { Val = 2.0 }
+            });
+
+            double sum = df.Sum("Val");
+            Assert.True(double.IsNaN(sum));
+        }
+
+        [Fact]
+        public void GroupBy_Handles_NaN_As_Single_Group()
+        {
+            var df = DataFrame.FromObjects(new[]
+            {
+                new { Val = double.NaN },
+                new { Val = double.NaN },
+                new { Val = 1.0 }
+            });
+
+            var groups = df.GroupBy("Val").Count();
+
+            Assert.Equal(2, groups.RowCount);
+
+            bool foundNanGroup = false;
+            for (int i = 0; i < groups.RowCount; i++)
+            {
+                double k = groups["Val"].Get<double>(i);
+                if (double.IsNaN(k))
+                {
+                    Assert.Equal(2, groups["Count"].Get<int>(i));
+                    foundNanGroup = true;
+                }
+            }
+            Assert.True(foundNanGroup);
+        }
     }
 }
