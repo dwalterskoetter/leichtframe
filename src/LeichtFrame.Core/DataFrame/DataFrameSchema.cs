@@ -8,7 +8,8 @@ namespace LeichtFrame.Core;
 /// <param name="Name">The unique name of the column.</param>
 /// <param name="DataType">The CLR type of the data stored in the column.</param>
 /// <param name="IsNullable">Indicates if the column supports null values.</param>
-public record ColumnDefinition(string Name, Type DataType, bool IsNullable = false);
+/// <param name="SourceIndex">The index of the column in the original data source (if applicable).</param>
+public record ColumnDefinition(string Name, Type DataType, bool IsNullable = false, int? SourceIndex = null);
 
 /// <summary>
 /// Represents the structure of a DataFrame, consisting of a collection of column definitions.

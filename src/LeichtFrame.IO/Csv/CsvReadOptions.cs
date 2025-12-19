@@ -29,5 +29,10 @@ namespace LeichtFrame.IO
         /// If null (default), the parser attempts to detect the format automatically based on the Culture.
         /// </summary>
         public string? DateFormat { get; set; } = null;
+        /// <summary>
+        /// Gets or sets a value indicating whether lines have a trailing delimiter. 
+        /// Default is <c>false</c>.
+        /// </summary>
+        public bool HasTrailingDelimiter { get; set; } = false;
     }
 }

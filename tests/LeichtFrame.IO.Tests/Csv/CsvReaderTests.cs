@@ -55,14 +55,15 @@ namespace LeichtFrame.IO.Tests
 
                 Assert.Equal(3, schema.Columns.Count);
 
-                // Age: Only ints -> int
                 Assert.Equal(typeof(int), schema.GetColumnType("Age"));
 
-                // Weight: Mixed double and int -> double (Promotion)
                 Assert.Equal(typeof(double), schema.GetColumnType("Weight"));
 
-                // Name: String
                 Assert.Equal(typeof(string), schema.GetColumnType("Name"));
+
+                Assert.Equal(0, schema.Columns[0].SourceIndex);
+
+                Assert.Equal(2, schema.Columns[2].SourceIndex);
             }
             finally
             {
@@ -219,6 +220,45 @@ namespace LeichtFrame.IO.Tests
             {
                 if (File.Exists(path)) File.Delete(path);
             }
+        }
+
+        [Fact]
+        public void Read_With_SourceIndex_Supports_Projection_And_Reordering()
+        {
+            var csv = "Id,Junk,Name,Score\n1,XXX,Alice,99.5\n2,YYY,Bob,80.0";
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("Name", typeof(string), SourceIndex: 2),
+                new ColumnDefinition("Id", typeof(int), SourceIndex: 0)
+            });
+
+            var df = CsvReader.Read(stream, schema);
+
+            Assert.Equal(2, df.RowCount);
+            Assert.Equal(2, df.ColumnCount);
+
+            Assert.Equal("Alice", df["Name"].Get<string>(0));
+            Assert.Equal(1, df["Id"].Get<int>(0));
+
+            Assert.False(df.HasColumn("Junk"));
+        }
+
+        [Fact]
+        public void Read_Handles_Rows_With_More_Columns_Than_Schema()
+        {
+            var csv = "A,B,C\n1,2,3";
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+            var schema = new DataFrameSchema(new[] {
+                new ColumnDefinition("A", typeof(int)),
+                new ColumnDefinition("B", typeof(int))
+            });
+
+            var df = CsvReader.Read(stream, schema);
+
+            Assert.Equal(1, df.RowCount);
+            Assert.Equal(2, df.ColumnCount);
         }
     }
 }

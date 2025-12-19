@@ -30,8 +30,6 @@ namespace LeichtFrame.Benchmarks
             }
 
             // --- 2. Job Configuration ---
-
-            // Basic-Job (always .NET 8 / x64)
             var job = Job.Default
                 .WithRuntime(CoreRuntime.Core80)
                 .WithPlatform(Platform.X64)
@@ -39,12 +37,19 @@ namespace LeichtFrame.Benchmarks
 
             if (isFastMode)
             {
-                // Turbo-Mode for Development (less precision, but much faster)
                 job = job
                     .WithWarmupCount(1)
                     .WithIterationCount(3)
                     .WithLaunchCount(1)
                     .WithInvocationCount(16);
+            }
+            else
+            {
+                // STABLE MODE
+                job = job
+                    .WithLaunchCount(3)
+                    .WithWarmupCount(4)
+                    .WithIterationCount(10);
             }
 
             var config = ManualConfig.Create(DefaultConfig.Instance)
@@ -61,7 +66,7 @@ namespace LeichtFrame.Benchmarks
             Console.WriteLine("=================================================");
             Console.ResetColor();
 
-            Console.WriteLine($"Mode:    {(isFastMode ? "⚡ FAST / DEV (Low Precision)" : "🐢 NORMAL (High Precision)")}");
+            Console.WriteLine($"Mode:    {(isFastMode ? "⚡ FAST / DEV (Low Precision)" : "🛡️  STABLE (High Precision)")}");
             Console.WriteLine("Target:  Comparison against DuckDB.NET");
             Console.WriteLine("Dataset: 1,000,000 Rows (configured via Params)");
             Console.WriteLine();
@@ -72,9 +77,9 @@ namespace LeichtFrame.Benchmarks
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("Usage Examples:");
                 Console.WriteLine("  1. Interactive Menu:   dotnet run -c Release");
-                Console.WriteLine("  2. Run All (Normal):   dotnet run -c Release -- all");
+                Console.WriteLine("  2. Run All (Stable):   dotnet run -c Release -- all");
                 Console.WriteLine("  3. Run All (Fast):     dotnet run -c Release -- all fast");
-                Console.WriteLine("  4. Filter (Fast):      dotnet run -c Release -- fast --filter \"*Join*\"");
+                Console.WriteLine("  4. Filter (Fast):      dotnet run -c Release -- fast --filter \"*GroupBy*\"");
                 Console.ResetColor();
                 Console.WriteLine();
                 Console.WriteLine("Select benchmarks from the list below:");
