@@ -64,6 +64,50 @@ namespace LeichtFrame.Core
         /// <returns>An array containing the group keys.</returns>
         public abstract Array GetKeys();
 
+        // -----------------------------------------------------------
+        // KORREKTUR: Methode hierher verschoben (in die Basisklasse)
+        // -----------------------------------------------------------
+
+        /// <summary>
+        /// Creates a shallow copy of this GroupedDataFrame attached to a new Source DataFrame.
+        /// Used internally when injecting computed columns.
+        /// </summary>
+        internal GroupedDataFrame WithSource(DataFrame newSource)
+        {
+            // Case 1: Integer Keys (Fast Path or Slow Path)
+            if (this is GroupedDataFrame<int> gInt)
+            {
+                if (NativeData != null)
+                {
+                    return new GroupedDataFrame<int>(newSource, GroupColumnNames, NativeData);
+                }
+
+                return new GroupedDataFrame<int>(
+                    newSource,
+                    GroupColumnNames,
+                    (int[])gInt.GetKeys(),
+                    gInt.GroupOffsets,
+                    gInt.RowIndices,
+                    gInt.NullGroupIndices
+                );
+            }
+
+            // Case 2: String Keys
+            if (this is GroupedDataFrame<string> gStr)
+            {
+                return new GroupedDataFrame<string>(
+                    newSource,
+                    GroupColumnNames,
+                    (string[])gStr.GetKeys(),
+                    gStr.GroupOffsets,
+                    gStr.RowIndices,
+                    gStr.NullGroupIndices
+                );
+            }
+
+            throw new NotSupportedException($"Re-binding source not supported for key type of {this.GetType().Name}");
+        }
+
         /// <summary>
         /// Releases unmanaged resources (NativeGroupedData) if they exist.
         /// </summary>
@@ -127,8 +171,7 @@ namespace LeichtFrame.Core
                 // Lazy loading: Copy from native memory only if requested as managed array.
                 if (_groupOffsets == null && NativeData != null)
                 {
-                    // FIXED: Replaced .ToArray() with explicit Marshal.Copy
-                    int count = NativeData.GroupCount + 1; // Offsets length is GroupCount + 1
+                    int count = NativeData.GroupCount + 1;
                     _groupOffsets = new int[count];
                     unsafe
                     {
@@ -147,7 +190,6 @@ namespace LeichtFrame.Core
                 // Lazy loading: Copy from native memory only if requested.
                 if (_rowIndices == null && NativeData != null)
                 {
-                    // FIXED: Replaced .ToArray() with explicit Marshal.Copy
                     int count = NativeData.RowCount;
                     _rowIndices = new int[count];
                     unsafe

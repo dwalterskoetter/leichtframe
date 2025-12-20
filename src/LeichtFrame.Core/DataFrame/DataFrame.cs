@@ -310,5 +310,15 @@ namespace LeichtFrame.Core
             // We use the existing indexer, which already handles validation/exception
             return this[name].DataType;
         }
+
+        /// <summary>
+        /// Converts this DataFrame into a <see cref="LazyDataFrame"/> to enable 
+        /// optimization and lazy evaluation of subsequent operations.
+        /// </summary>
+        /// <returns>A lazy wrapper around this DataFrame.</returns>
+        public LazyDataFrame Lazy()
+        {
+            return LazyDataFrame.From(this);
+        }
     }
 }
