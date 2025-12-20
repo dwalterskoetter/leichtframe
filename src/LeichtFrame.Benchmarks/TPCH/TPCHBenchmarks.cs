@@ -100,20 +100,15 @@ namespace LeichtFrame.Benchmarks
         [Benchmark(Description = "LF Q1: New Engine (Single Pass)")]
         public DataFrame RunQ1LeichtFrame()
         {
-            // --- STEP 1: Filter ---
             var filtered = _lineItemDf.Where(row => row.Get<DateTime>("l_shipdate") <= _targetDate);
 
-            // --- STEP 2: Calculation (Vectorized) ---
             var withCharge = filtered
                 .AddColumn("disc_price", row => row.Get<double>("l_extendedprice") * (1.0 - row.Get<double>("l_discount")))
                 .AddColumn("charge", row => row.Get<double>("l_extendedprice") * (1.0 - row.Get<double>("l_discount")) * (1.0 + row.Get<double>("l_tax")));
 
-            // --- STEP 3: Group Key Generation ---
-            // (Workaround: String Concatenation until MultiColumnHashStrategy got implemented)
             var groupedDf = withCharge.AddColumn("group_key", row =>
                 row.Get<string>("l_returnflag") + row.Get<string>("l_linestatus"));
 
-            // --- STEP 4: Aggregation (The New Engine) ---
             using var gdf = groupedDf.GroupBy("group_key");
 
             return gdf.Aggregate(
