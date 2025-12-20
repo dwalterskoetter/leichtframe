@@ -1,6 +1,8 @@
 ﻿using System.Text;
 using LeichtFrame.Core;
 using LeichtFrame.IO;
+using LeichtFrame.Core.Operations.GroupBy;
+using LeichtFrame.Core.Operations.Aggregate;
 
 Console.WriteLine("=========================================================");
 Console.WriteLine("   🚀 LeichtFrame - End-to-End Data Pipeline Demo");
