@@ -1,5 +1,8 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using LeichtFrame.Core.Operations.Join;
+using LeichtFrame.Core.Operations.GroupBy;
+using LeichtFrame.Core.Operations.Aggregate;
 using DuckDB.NET.Data;
 using static LeichtFrame.Core.Expressions.F;
 
@@ -14,10 +17,6 @@ namespace LeichtFrame.Benchmarks
         public record ProductPoco(int ProductId, string Category);
         public record OrderPoco(int OrderId, int ProductId, double Amount);
 
-        /// <summary>
-        /// Setup specifically for advanced lazy benchmarks.
-        /// Overrides base setup to generate relational data (Orders/Products).
-        /// </summary>
         public override void GlobalSetup()
         {
             base.GlobalSetup();
@@ -70,16 +69,6 @@ namespace LeichtFrame.Benchmarks
             }
         }
 
-        // =========================================================
-        // QUERY:
-        // SELECT Category, SUM(Amount) as Total, COUNT(*) as Count
-        // FROM Orders o
-        // JOIN Products p ON o.ProductId = p.ProductId
-        // WHERE Amount > 500.0
-        // GROUP BY Category
-        // ORDER BY Total DESC
-        // =========================================================
-
         [Benchmark(Baseline = true, Description = "DuckDB SQL")]
         public void DuckDB_Complex()
         {
@@ -119,7 +108,8 @@ namespace LeichtFrame.Benchmarks
             return _orders.Lazy()
                 .Where(Col("Amount") > 500.0)
                 .Join(_products.Lazy(), "ProductId")
-                .GroupBy("Category",
+                .GroupBy("Category")
+                .Agg(
                     Sum(Col("Amount")).As("Total"),
                     Count().As("Cnt")
                 )

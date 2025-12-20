@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Transform
 {
     /// <summary>
     /// Provides extension methods for transforming data and adding computed columns.

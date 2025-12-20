@@ -1,4 +1,6 @@
-namespace LeichtFrame.Core
+using LeichtFrame.Core.Operations.Transform;
+
+namespace LeichtFrame.Core.Operations.Sort
 {
     /// <summary>
     /// Provides optimized Top-N / Bottom-N selection algorithms (Heap-based).

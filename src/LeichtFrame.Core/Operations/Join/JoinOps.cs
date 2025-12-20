@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Join
 {
     /// <summary>
     /// Provides extension methods for joining multiple <see cref="DataFrame"/> objects.

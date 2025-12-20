@@ -1,4 +1,6 @@
-namespace LeichtFrame.Core.Engine
+using LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies;
+
+namespace LeichtFrame.Core.Engine.Kernels.GroupBy
 {
     internal static class GroupByDispatcher
     {
@@ -36,6 +38,18 @@ namespace LeichtFrame.Core.Engine
             // 3. Fallback (Double, DateTime, Bool...)
             // TODO: Für Bool könnte man hier noch BoolDirectStrategy einbauen
             return new GenericHashMapStrategy().Group(df, columnName);
+        }
+
+        public static GroupedDataFrame DecideAndExecute(DataFrame df, string[] columnNames)
+        {
+            // Wenn nur 1 Spalte -> Fast Path über Single Column Logic
+            if (columnNames.Length == 1)
+            {
+                return DecideAndExecute(df, columnNames[0]);
+            }
+
+            // Multi Column -> Unser neuer Kernel
+            return new MultiColumnHashStrategy().Group(df, columnNames);
         }
     }
 }

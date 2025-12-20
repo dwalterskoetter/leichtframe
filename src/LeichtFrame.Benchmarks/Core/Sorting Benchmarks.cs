@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using LeichtFrame.Core.Operations.Sort;
 
 namespace LeichtFrame.Benchmarks
 {

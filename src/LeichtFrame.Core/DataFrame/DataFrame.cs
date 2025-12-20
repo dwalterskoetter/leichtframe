@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Text;
+using LeichtFrame.Core.Expressions;
+using LeichtFrame.Core.Operations.Delegates;
 
 namespace LeichtFrame.Core
 {
@@ -9,120 +11,6 @@ namespace LeichtFrame.Core
     /// </summary>
     public class DataFrame : IDisposable
     {
-        /// <summary>
-        /// Creates a new, empty DataFrame based on the provided schema.
-        /// Pre-allocates memory for the specified capacity to minimize resize operations.
-        /// </summary>
-        /// <param name="schema">The schema defining the columns.</param>
-        /// <param name="capacity">The initial capacity (number of rows) to reserve.</param>
-        /// <returns>A new DataFrame instance.</returns>
-        public static DataFrame Create(DataFrameSchema schema, int capacity = 16)
-        {
-            if (schema == null) throw new ArgumentNullException(nameof(schema));
-            if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity));
-
-            var columns = new List<IColumn>(schema.Columns.Count);
-
-            foreach (var colDef in schema.Columns)
-            {
-                var col = ColumnFactory.Create(colDef.Name, colDef.DataType, capacity, colDef.IsNullable);
-                columns.Add(col);
-            }
-
-            return new DataFrame(columns);
-        }
-
-        /// <summary>
-        /// Returns a short summary of the DataFrame (e.g., "DataFrame (1000 rows, 5 columns)").
-        /// </summary>
-        public override string ToString()
-        {
-            return $"DataFrame ({RowCount} rows, {ColumnCount} columns)";
-        }
-
-        /// <summary>
-        /// Generates a formatted string representing the first N rows of the DataFrame.
-        /// Useful for console output and debugging.
-        /// </summary>
-        /// <param name="limit">The maximum number of rows to display (default 10).</param>
-        public string Inspect(int limit = 10)
-        {
-            if (ColumnCount == 0) return "Empty DataFrame";
-
-            var sb = new StringBuilder();
-            sb.AppendLine(ToString());
-            sb.AppendLine(new string('-', 30));
-
-            int rowsToShow = Math.Min(RowCount, limit);
-
-            // 1. Calculate optimal column widths based on Header and Visible Data
-            int[] widths = new int[ColumnCount];
-            for (int c = 0; c < ColumnCount; c++)
-            {
-                var col = _columns[c];
-                int maxWidth = col.Name.Length;
-
-                // Consider type name length (e.g., <Int32>)
-                maxWidth = Math.Max(maxWidth, col.DataType.Name.Length + 2);
-
-                // Scan visible data for width
-                for (int r = 0; r < rowsToShow; r++)
-                {
-                    object? val = col.GetValue(r);
-                    int len = val?.ToString()?.Length ?? 4; // 4 for "null"
-                    if (len > maxWidth) maxWidth = len;
-                }
-
-                // Limit to a reasonable max (e.g., 50 characters) to prevent console overflow
-                widths[c] = Math.Min(maxWidth, 50) + 2; // +2 Padding
-            }
-
-            // 2. Print Header (Names)
-            for (int c = 0; c < ColumnCount; c++)
-            {
-                sb.Append(_columns[c].Name.PadRight(widths[c]));
-            }
-            sb.AppendLine();
-
-            // 3. Print Header (Types)
-            for (int c = 0; c < ColumnCount; c++)
-            {
-                string typeStr = $"<{_columns[c].DataType.Name}>";
-                sb.Append(typeStr.PadRight(widths[c]));
-            }
-            sb.AppendLine();
-
-            // Separator line based on total width
-            int totalWidth = widths.Sum();
-            sb.AppendLine(new string('-', totalWidth));
-
-            // 4. Print Rows
-            for (int r = 0; r < rowsToShow; r++)
-            {
-                for (int c = 0; c < ColumnCount; c++)
-                {
-                    object? val = _columns[c].GetValue(r);
-                    string valStr = val is null ? "null" : val.ToString() ?? "";
-
-                    // Truncate if too long (Visual Safety)
-                    if (valStr.Length > widths[c] - 1)
-                        valStr = valStr.Substring(0, widths[c] - 4) + "...";
-
-                    sb.Append(valStr.PadRight(widths[c]));
-                }
-                sb.AppendLine();
-            }
-
-            // 5. Footer hint
-            if (RowCount > limit)
-            {
-                sb.AppendLine(new string('-', 20));
-                sb.AppendLine($"... ({RowCount - limit} more rows)");
-            }
-
-            return sb.ToString();
-        }
-
         private readonly List<IColumn> _columns;
         private bool _isDisposed;
 
@@ -160,14 +48,10 @@ namespace LeichtFrame.Core
             if (_columns.Count > 0)
             {
                 int expectedLength = _columns[0].Length;
-                for (int i = 1; i < _columns.Count; i++)
+                if (_columns.Any(c => c.Length != expectedLength))
                 {
-                    if (_columns[i].Length != expectedLength)
-                    {
-                        throw new ArgumentException(
-                            $"Column length mismatch. Column '{_columns[i].Name}' has length {_columns[i].Length}, " +
-                            $"but expected {expectedLength} (from '{_columns[0].Name}').");
-                    }
+                    throw new ArgumentException(
+                       $"Column length mismatch. Expected {expectedLength} rows based on first column.");
                 }
             }
 
@@ -177,48 +61,28 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Gets the column at the specified index.
+        /// Creates a new, empty DataFrame based on the provided schema.
+        /// Pre-allocates memory for the specified capacity to minimize resize operations.
         /// </summary>
-        public IColumn this[int index] => _columns[index];
-
-        /// <summary>
-        /// Gets the column with the specified name.
-        /// Throws <see cref="ArgumentException"/> if the column does not exist.
-        /// </summary>
-        public IColumn this[string name]
+        public static DataFrame Create(DataFrameSchema schema, int capacity = 16)
         {
-            get
-            {
-                // Schema lookup handles the exception if name is missing
-                int index = Schema.GetColumnIndex(name);
-                return _columns[index];
-            }
-        }
+            if (schema == null) throw new ArgumentNullException(nameof(schema));
+            if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity));
 
-        /// <summary>
-        /// Tries to get the column with the specified name.
-        /// Returns true if found, otherwise false.
-        /// </summary>
-        public bool TryGetColumn(string name, out IColumn? column)
-        {
-            if (Schema.HasColumn(name))
+            var columns = new List<IColumn>(schema.Columns.Count);
+
+            foreach (var colDef in schema.Columns)
             {
-                int index = Schema.GetColumnIndex(name);
-                column = _columns[index];
-                return true;
+                var col = ColumnFactory.Create(colDef.Name, colDef.DataType, capacity, colDef.IsNullable);
+                columns.Add(col);
             }
 
-            column = null;
-            return false;
+            return new DataFrame(columns);
         }
 
         /// <summary>
         /// Creates a DataFrame from a collection of objects (POCOs) using Reflection.
-        /// The schema is automatically generated from the public properties of <typeparamref name="T"/>.
         /// </summary>
-        /// <typeparam name="T">The type of the objects, determining the schema.</typeparam>
-        /// <param name="objects">The collection of objects to load.</param>
-        /// <returns>A populated DataFrame containing the data from the objects.</returns>
         public static DataFrame FromObjects<T>(IEnumerable<T> objects)
         {
             if (objects == null) throw new ArgumentNullException(nameof(objects));
@@ -252,64 +116,91 @@ namespace LeichtFrame.Core
             return df;
         }
 
-        /// <summary>
-        /// Disposes all contained columns, returning their memory to the pool.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
+        // --- INDEXERS & ACCESSORS ---
 
         /// <summary>
-        /// Releases unmanaged and - optionally - managed resources.
+        /// Gets the column at the specified index.
         /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_isDisposed) return;
+        public IColumn this[int index] => _columns[index];
 
-            if (disposing)
+        /// <summary>
+        /// Gets the column with the specified name.
+        /// </summary>
+        public IColumn this[string name] => _columns[Schema.GetColumnIndex(name)];
+
+        /// <summary>
+        /// Tries to get the column with the specified name.
+        /// </summary>
+        public bool TryGetColumn(string name, out IColumn? column)
+        {
+            if (Schema.HasColumn(name))
             {
-                foreach (var col in _columns)
-                {
-                    // Check if the column implements IDisposable (our concrete columns do)
-                    if (col is IDisposable disposableCol)
-                    {
-                        disposableCol.Dispose();
-                    }
-                }
+                column = this[name];
+                return true;
             }
-            _isDisposed = true;
-        }
-
-        /// <summary>
-        /// Checks if a column with the given name exists in the DataFrame.
-        /// </summary>
-        public bool HasColumn(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return false;
-            return Schema.HasColumn(name);
+            column = null;
+            return false;
         }
 
         /// <summary>
         /// Returns the names of all columns in the DataFrame.
         /// </summary>
-        public IEnumerable<string> GetColumnNames()
-        {
-            return _columns.Select(c => c.Name);
-        }
+        public IEnumerable<string> GetColumnNames() => _columns.Select(c => c.Name);
 
         /// <summary>
         /// Returns the .NET Type of the data stored in the specified column.
-        /// Throws ArgumentException if the column does not exist.
         /// </summary>
-        public Type GetColumnType(string name)
+        public Type GetColumnType(string name) => this[name].DataType;
+
+        /// <summary>
+        /// Checks if a column with the given name exists in the DataFrame.
+        /// </summary>
+        public bool HasColumn(string name) => Schema.HasColumn(name);
+
+        // =========================================================
+        // EAGER OPERATIONS (Direct Execution)
+        // =========================================================
+
+        /// <summary>
+        /// Filters rows using a C# delegate. Executed immediately via row-by-row iteration.
+        /// Use only if logic cannot be expressed via <see cref="Lazy"/>.
+        /// </summary>
+        /// <param name="predicate">The filter condition.</param>
+        /// <returns>A new DataFrame containing matching rows.</returns>
+        public DataFrame Where(Func<RowView, bool> predicate)
         {
-            // We use the existing indexer, which already handles validation/exception
-            return this[name].DataType;
+            // Delegates to the specialized Eager implementation in Operations/Delegates
+            return FilterDelegateOps.Execute(this, predicate);
         }
+
+        /// <summary>
+        /// Selects columns immediately. Uses the high-performance Lazy Engine internally.
+        /// </summary>
+        /// <param name="columnNames">The names of the columns to keep.</param>
+        public DataFrame Select(params string[] columnNames)
+        {
+            return this.Lazy().Select(columnNames).Collect();
+        }
+
+        /// <summary>
+        /// Sorts the DataFrame immediately in ascending order.
+        /// </summary>
+        public DataFrame OrderBy(string columnName)
+        {
+            return this.Lazy().OrderBy(columnName).Collect();
+        }
+
+        /// <summary>
+        /// Sorts the DataFrame immediately in descending order.
+        /// </summary>
+        public DataFrame OrderByDescending(string columnName)
+        {
+            return this.Lazy().OrderByDescending(columnName).Collect();
+        }
+
+        // =========================================================
+        // LAZY ENTRY POINT
+        // =========================================================
 
         /// <summary>
         /// Converts this DataFrame into a <see cref="LazyDataFrame"/> to enable 
@@ -319,6 +210,101 @@ namespace LeichtFrame.Core
         public LazyDataFrame Lazy()
         {
             return LazyDataFrame.From(this);
+        }
+
+        // --- UTILS & DISPOSE ---
+
+        /// <summary>
+        /// Returns a short summary of the DataFrame.
+        /// </summary>
+        public override string ToString()
+        {
+            return $"DataFrame ({RowCount} rows, {ColumnCount} columns)";
+        }
+
+        /// <summary>
+        /// Generates a formatted string representing the first N rows of the DataFrame.
+        /// </summary>
+        public string Inspect(int limit = 10)
+        {
+            if (ColumnCount == 0) return "Empty DataFrame";
+
+            var sb = new StringBuilder();
+            sb.AppendLine(ToString());
+            sb.AppendLine(new string('-', 30));
+
+            int rowsToShow = Math.Min(RowCount, limit);
+            int[] widths = new int[ColumnCount];
+
+            // Calculate widths
+            for (int c = 0; c < ColumnCount; c++)
+            {
+                var col = _columns[c];
+                int maxWidth = Math.Max(col.Name.Length, col.DataType.Name.Length + 2);
+                for (int r = 0; r < rowsToShow; r++)
+                {
+                    int len = col.GetValue(r)?.ToString()?.Length ?? 4;
+                    if (len > maxWidth) maxWidth = len;
+                }
+                widths[c] = Math.Min(maxWidth, 50) + 2;
+            }
+
+            // Header
+            for (int c = 0; c < ColumnCount; c++) sb.Append(_columns[c].Name.PadRight(widths[c]));
+            sb.AppendLine();
+            for (int c = 0; c < ColumnCount; c++) sb.Append($"<{_columns[c].DataType.Name}>".PadRight(widths[c]));
+            sb.AppendLine();
+            sb.AppendLine(new string('-', widths.Sum()));
+
+            // Rows
+            for (int r = 0; r < rowsToShow; r++)
+            {
+                for (int c = 0; c < ColumnCount; c++)
+                {
+                    object? val = _columns[c].GetValue(r);
+                    string valStr = val is null ? "null" : val.ToString() ?? "";
+                    if (valStr.Length > widths[c] - 1) valStr = valStr.Substring(0, widths[c] - 4) + "...";
+                    sb.Append(valStr.PadRight(widths[c]));
+                }
+                sb.AppendLine();
+            }
+
+            if (RowCount > limit)
+            {
+                sb.AppendLine(new string('-', 20));
+                sb.AppendLine($"... ({RowCount - limit} more rows)");
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Disposes all contained columns, returning their memory to the pool.
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Releases unmanaged and - optionally - managed resources.
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_isDisposed) return;
+
+            if (disposing)
+            {
+                foreach (var col in _columns)
+                {
+                    if (col is IDisposable disposableCol)
+                    {
+                        disposableCol.Dispose();
+                    }
+                }
+            }
+            _isDisposed = true;
         }
     }
 }

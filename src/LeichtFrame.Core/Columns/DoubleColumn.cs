@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using LeichtFrame.Core.Engine;
+using LeichtFrame.Core.Engine.Memory;
 
 namespace LeichtFrame.Core
 {

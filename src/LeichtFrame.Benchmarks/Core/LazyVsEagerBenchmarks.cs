@@ -1,5 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using LeichtFrame.Core.Operations.Transform;
+using LeichtFrame.Core.Operations.Filter;
 using static LeichtFrame.Core.Expressions.F;
 
 namespace LeichtFrame.Benchmarks

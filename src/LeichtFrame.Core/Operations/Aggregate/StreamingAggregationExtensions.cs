@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Aggregate
 {
     /// <summary>
     /// Extension methods for streaming aggregations.

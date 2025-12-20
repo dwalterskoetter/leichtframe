@@ -73,6 +73,9 @@ namespace LeichtFrame.Core.Expressions
         /// <summary>Implicitly converts a bool to a literal expression.</summary>
         public static implicit operator Expr(bool v) => new LitExpr(v);
 
+        /// <summary>Implicitly converts a DateTime to a literal expression.</summary>
+        public static implicit operator Expr(DateTime v) => new LitExpr(v);
+
         // --- Fluent Methods ---
 
         /// <summary>

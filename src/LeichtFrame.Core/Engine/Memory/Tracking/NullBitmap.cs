@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 
-namespace LeichtFrame.Core.Engine
+namespace LeichtFrame.Core.Engine.Memory
 {
     /// <summary>
     /// A memory-efficient bitset used to track null values in nullable columns.

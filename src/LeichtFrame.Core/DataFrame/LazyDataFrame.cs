@@ -36,8 +36,6 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Filters the rows based on the provided boolean expression.
         /// </summary>
-        /// <param name="predicate">The condition expression.</param>
-        /// <returns>A new LazyDataFrame with the filter node appended.</returns>
         public LazyDataFrame Where(Expr predicate)
         {
             return new LazyDataFrame(new Filter(Plan, predicate));
@@ -46,8 +44,6 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Projects the DataFrame to the specified expressions.
         /// </summary>
-        /// <param name="exprs">The list of expressions to select.</param>
-        /// <returns>A new LazyDataFrame with the projection node appended.</returns>
         public LazyDataFrame Select(params Expr[] exprs)
         {
             return new LazyDataFrame(new Projection(Plan, exprs.ToList()));
@@ -56,8 +52,6 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Projects the DataFrame to the specified columns by name.
         /// </summary>
-        /// <param name="cols">The names of the columns to select.</param>
-        /// <returns>A new LazyDataFrame with the projection node appended.</returns>
         public LazyDataFrame Select(params string[] cols)
         {
             var exprs = cols.Select(c => new ColExpr(c)).Cast<Expr>().ToArray();
@@ -65,21 +59,11 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Groups the DataFrame by the specified columns and performs aggregations.
+        /// Internal method to create an Aggregate node directly.
         /// </summary>
-        /// <param name="groupByCols">The columns to group by.</param>
-        /// <param name="aggregations">The aggregations to perform.</param>
         public LazyDataFrame Aggregate(Expr[] groupByCols, Expr[] aggregations)
         {
             return new LazyDataFrame(new Aggregate(Plan, groupByCols.ToList(), aggregations.ToList()));
-        }
-
-        /// <summary>
-        /// Convenience overload for GroupBy -> Agg syntax.
-        /// </summary>
-        public LazyDataFrame GroupBy(string groupByCol, params Expr[] aggregations)
-        {
-            return Aggregate(new[] { F.Col(groupByCol) }, aggregations);
         }
 
         /// <summary>
@@ -87,7 +71,6 @@ namespace LeichtFrame.Core
         /// </summary>
         public LazyDataFrame Join(LazyDataFrame other, string on, JoinType type = JoinType.Inner)
         {
-            // Note: Currently supports only same column name on both sides
             return new LazyDataFrame(new Join(Plan, other.Plan, on, on, type));
         }
 
@@ -112,16 +95,34 @@ namespace LeichtFrame.Core
         /// <summary>
         /// Optimizes and executes the logical plan, returning the result as a materialized DataFrame.
         /// </summary>
-        /// <returns>The result DataFrame.</returns>
         public DataFrame Collect()
         {
-            // 1. Optimize Plan
             var optimizer = new OptimizerEngine();
             var optimizedPlan = optimizer.Optimize(Plan);
 
-            // 2. Execute Plan
             var physicalPlanner = new PhysicalPlanner();
             return physicalPlanner.Execute(optimizedPlan);
+        }
+
+        // --- Aggregation (Corrected API) ---
+
+        /// <summary>
+        /// Groups the DataFrame by the specified columns.
+        /// Returns a <see cref="GroupedLazyFrame"/> to define aggregations via .Agg(...).
+        /// </summary>
+        public GroupedLazyFrame GroupBy(params Expr[] cols)
+        {
+            return new GroupedLazyFrame(this, cols);
+        }
+
+        /// <summary>
+        /// Groups the DataFrame by the specified column names.
+        /// Returns a <see cref="GroupedLazyFrame"/> to define aggregations via .Agg(...).
+        /// </summary>
+        public GroupedLazyFrame GroupBy(params string[] cols)
+        {
+            var exprs = cols.Select(c => new ColExpr(c)).Cast<Expr>();
+            return new GroupedLazyFrame(this, exprs);
         }
     }
 }

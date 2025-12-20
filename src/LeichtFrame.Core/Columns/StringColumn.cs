@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Text;
-using LeichtFrame.Core.Engine;
+using LeichtFrame.Core.Engine.Memory;
 
 namespace LeichtFrame.Core
 {
@@ -268,11 +268,10 @@ namespace LeichtFrame.Core
             }
         }
 
-        private void EnsureByteCapacity(int minBytes)
+        internal void EnsureByteCapacity(int minBytes)
         {
             if (_values.Length < minBytes)
             {
-                // Double capacity or match required bytes
                 int newCap = Math.Max(_values.Length * 2, minBytes);
                 var newBuf = ArrayPool<byte>.Shared.Rent(newCap);
 
@@ -291,13 +290,70 @@ namespace LeichtFrame.Core
         /// <inheritdoc />
         public override IColumn CloneSubset(IReadOnlyList<int> indices)
         {
-            var newCol = new StringColumn(Name, indices.Count, IsNullable);
-            foreach (var idx in indices)
+            int newRowCount = indices.Count;
+            var newCol = new StringColumn(Name, newRowCount, IsNullable);
+
+            int totalBytesNeeded = 0;
+
+            if (indices is int[] arrIndices)
             {
-                // Currently decoding the string.
-                // In Phase 3, we could implement "Raw Byte Copy" for speed.
-                newCol.Append(Get(idx));
+                for (int i = 0; i < newRowCount; i++)
+                {
+                    int idx = arrIndices[i];
+                    if (!IsNullable || !IsNull(idx))
+                    {
+                        totalBytesNeeded += _offsets[idx + 1] - _offsets[idx];
+                    }
+                }
             }
+            else
+            {
+                for (int i = 0; i < newRowCount; i++)
+                {
+                    int idx = indices[i];
+                    if (!IsNullable || !IsNull(idx))
+                    {
+                        totalBytesNeeded += _offsets[idx + 1] - _offsets[idx];
+                    }
+                }
+            }
+
+            newCol.EnsureByteCapacity(totalBytesNeeded);
+
+            int currentDestOffset = 0;
+
+            var destOffsets = newCol._offsets;
+            var destBytes = newCol._values;
+            var destNulls = newCol._nulls;
+
+            destOffsets[0] = 0;
+
+            for (int i = 0; i < newRowCount; i++)
+            {
+                int srcIdx = indices[i];
+
+                if (IsNullable && IsNull(srcIdx))
+                {
+                    destNulls!.SetNull(i);
+                    destOffsets[i + 1] = currentDestOffset;
+                    continue;
+                }
+
+                int start = _offsets[srcIdx];
+                int length = _offsets[srcIdx + 1] - start;
+
+                if (length > 0)
+                {
+                    Array.Copy(_values, start, destBytes, currentDestOffset, length);
+                    currentDestOffset += length;
+                }
+
+                destOffsets[i + 1] = currentDestOffset;
+            }
+
+            newCol._length = newRowCount;
+            newCol._totalByteCount = currentDestOffset;
+
             return newCol;
         }
 

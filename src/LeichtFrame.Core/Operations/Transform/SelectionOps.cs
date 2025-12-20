@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Transform
 {
     /// <summary>
     /// Provides extension methods for selecting columns and slicing rows from a <see cref="DataFrame"/>.

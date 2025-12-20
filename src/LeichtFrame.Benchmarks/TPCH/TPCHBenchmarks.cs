@@ -2,7 +2,7 @@ using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
 using LeichtFrame.IO;
 using DuckDB.NET.Data;
-using System.Data;
+using static LeichtFrame.Core.Expressions.F;
 
 namespace LeichtFrame.Benchmarks
 {
@@ -42,7 +42,7 @@ namespace LeichtFrame.Benchmarks
         public void Setup()
         {
             if (!File.Exists(FilePath))
-                throw new FileNotFoundException($"Datei nicht gefunden: {FilePath}");
+                throw new FileNotFoundException($"File not found: {FilePath}");
 
             // 1. LeichtFrame Setup
             var schema = new DataFrameSchema(new[]
@@ -94,34 +94,36 @@ namespace LeichtFrame.Benchmarks
                     }});";
             cmd.ExecuteNonQuery();
 
-            Console.WriteLine($"Benchmarks bereit. Datensätze: {_lineItemDf.RowCount:N0}");
+            Console.WriteLine($"Benchmarks ready. Datasets: {_lineItemDf.RowCount:N0}");
         }
 
-        [Benchmark(Description = "LF Q1: New Engine (Single Pass)")]
+        [Benchmark(Description = "LF Q1: Lazy API")]
         public DataFrame RunQ1LeichtFrame()
         {
-            var filtered = _lineItemDf.Where(row => row.Get<DateTime>("l_shipdate") <= _targetDate);
-
-            var withCharge = filtered
-                .AddColumn("disc_price", row => row.Get<double>("l_extendedprice") * (1.0 - row.Get<double>("l_discount")))
-                .AddColumn("charge", row => row.Get<double>("l_extendedprice") * (1.0 - row.Get<double>("l_discount")) * (1.0 + row.Get<double>("l_tax")));
-
-            var groupedDf = withCharge.AddColumn("group_key", row =>
-                row.Get<string>("l_returnflag") + row.Get<string>("l_linestatus"));
-
-            using var gdf = groupedDf.GroupBy("group_key");
-
-            return gdf.Aggregate(
-                Agg.Sum("l_quantity", "sum_qty"),
-                Agg.Sum("l_extendedprice", "sum_base_price"),
-                Agg.Sum("disc_price", "sum_disc_price"),
-                Agg.Sum("charge", "sum_charge"),
-                Agg.Mean("l_quantity", "avg_qty"),
-                Agg.Mean("l_extendedprice", "avg_price"),
-                Agg.Mean("l_discount", "avg_disc"),
-                Agg.Count("count_order")
-            )
-            .OrderBy("group_key");
+            return _lineItemDf.Lazy()
+                .Where(Col("l_shipdate") <= _targetDate)
+                .Select(
+                    Col("l_returnflag"),
+                    Col("l_linestatus"),
+                    Col("l_quantity"),
+                    Col("l_extendedprice"),
+                    Col("l_discount"),
+                    (Col("l_extendedprice") * (1.0 - Col("l_discount"))).As("disc_price"),
+                    (Col("l_extendedprice") * (1.0 - Col("l_discount")) * (1.0 + Col("l_tax"))).As("charge")
+                )
+                .GroupBy("l_returnflag", "l_linestatus")
+                .Agg(
+                    Sum(Col("l_quantity")).As("sum_qty"),
+                    Sum(Col("l_extendedprice")).As("sum_base_price"),
+                    Sum(Col("disc_price")).As("sum_disc_price"),
+                    Sum(Col("charge")).As("sum_charge"),
+                    Mean(Col("l_quantity")).As("avg_qty"),
+                    Mean(Col("l_extendedprice")).As("avg_price"),
+                    Mean(Col("l_discount")).As("avg_disc"),
+                    Count().As("count_order")
+                )
+                .OrderBy("l_returnflag")
+                .Collect();
         }
 
         [Benchmark(Description = "DuckDB Q1: Pricing Summary (SQL)")]

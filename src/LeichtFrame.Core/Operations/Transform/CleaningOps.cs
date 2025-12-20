@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Transform
 {
     /// <summary>
     /// Provides extension methods for cleaning data (handling nulls).

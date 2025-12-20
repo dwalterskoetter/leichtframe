@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Filter
 {
     /// <summary>
     /// Provides high-performance, SIMD-accelerated filtering operations for DataFrames.
@@ -109,6 +109,52 @@ namespace LeichtFrame.Core
             }
 
             var newColumns = new List<IColumn>();
+            foreach (var originalCol in df.Columns)
+            {
+                newColumns.Add(originalCol.CloneSubset(indices));
+            }
+
+            return new DataFrame(newColumns);
+        }
+
+        /// <summary>
+        /// Specialized vectorized filter for DateTime columns.
+        /// </summary>
+        public static DataFrame WhereVec(this DataFrame df, string columnName, CompareOp op, DateTime value)
+        {
+            var col = df[columnName];
+            if (col is not DateTimeColumn dtCol)
+            {
+                throw new ArgumentException($"Column '{columnName}' is not a DateTimeColumn.");
+            }
+
+            var data = dtCol.Values.Span;
+            var indices = new List<int>(data.Length / 4);
+
+            // Scalar Loop Optimization (DateTime comparison is cheap)
+            // Future Optimization: Cast<DateTime, long> and use SIMD on Ticks
+            for (int i = 0; i < data.Length; i++)
+            {
+                // Null Check
+                if (dtCol.IsNullable && dtCol.IsNull(i)) continue;
+
+                var val = data[i];
+                bool match = op switch
+                {
+                    CompareOp.Equal => val == value,
+                    CompareOp.NotEqual => val != value,
+                    CompareOp.GreaterThan => val > value,
+                    CompareOp.GreaterThanOrEqual => val >= value,
+                    CompareOp.LessThan => val < value,
+                    CompareOp.LessThanOrEqual => val <= value,
+                    _ => false
+                };
+
+                if (match) indices.Add(i);
+            }
+
+            // Materialize Result
+            var newColumns = new List<IColumn>(df.ColumnCount);
             foreach (var originalCol in df.Columns)
             {
                 newColumns.Add(originalCol.CloneSubset(indices));

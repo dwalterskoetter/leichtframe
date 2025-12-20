@@ -18,10 +18,21 @@ namespace LeichtFrame.Core.Execution
 
         private static IColumn EvaluateBinary(BinaryExpr b, DataFrame df)
         {
+            if (b.Right is LitExpr rightLit)
+            {
+                var leftCol = Evaluate(b.Left, df);
+                return ExecuteScalar(leftCol, rightLit.Value, b.Op, leftIsScalar: false);
+            }
+
+            if (b.Left is LitExpr leftLit)
+            {
+                var rightCol = Evaluate(b.Right, df);
+                return ExecuteScalar(rightCol, leftLit.Value, b.Op, leftIsScalar: true);
+            }
+
             var left = Evaluate(b.Left, df);
             var right = Evaluate(b.Right, df);
 
-            // 1. Dispatch INT
             if (left is IntColumn lInt && right is IntColumn rInt)
             {
                 return b.Op switch
@@ -34,7 +45,6 @@ namespace LeichtFrame.Core.Execution
                 };
             }
 
-            // 2. Dispatch DOUBLE
             if (left is DoubleColumn lDbl && right is DoubleColumn rDbl)
             {
                 return b.Op switch
@@ -47,14 +57,68 @@ namespace LeichtFrame.Core.Execution
                 };
             }
 
-            // 3. Dispatch MIXED (Int + Double) -> Cast Int to Double
-            if (left is IntColumn lI && right is DoubleColumn rD)
+            throw new NotSupportedException($"Type mismatch or unsupported: {left.DataType.Name} vs {right.DataType.Name}");
+        }
+
+        private static IColumn ExecuteScalar(IColumn col, object? scalarVal, BinaryOp op, bool leftIsScalar)
+        {
+            if (scalarVal == null) throw new NotSupportedException("Scalar math with null literals not implemented yet.");
+
+            // === DOUBLE ===
+            if (col is DoubleColumn dc)
             {
-                var lAsDbl = ConvertIntToDouble(lI);
-                return EvaluateBinary(new BinaryExpr(new LitExpr(null), b.Op, new LitExpr(null)), df);
+                double val = Convert.ToDouble(scalarVal);
+                if (leftIsScalar)
+                {
+                    return op switch
+                    {
+                        BinaryOp.Add => dc + val,
+                        BinaryOp.Multiply => dc * val,
+                        BinaryOp.Subtract => (dc * -1.0) + val,
+                        _ => throw new NotSupportedException($"Scalar Left operation {op} not optimized for Double yet.")
+                    };
+                }
+                else
+                {
+                    return op switch
+                    {
+                        BinaryOp.Add => dc + val,
+                        BinaryOp.Subtract => dc - val,
+                        BinaryOp.Multiply => dc * val,
+                        BinaryOp.Divide => dc / val,
+                        _ => throw new NotSupportedException($"Op {op} not supported")
+                    };
+                }
             }
 
-            throw new NotSupportedException($"Type mismatch: {left.DataType.Name} vs {right.DataType.Name}");
+            // === INT ===
+            if (col is IntColumn ic)
+            {
+                int val = Convert.ToInt32(scalarVal);
+                if (leftIsScalar)
+                {
+                    return op switch
+                    {
+                        BinaryOp.Add => ic + val,
+                        BinaryOp.Multiply => ic * val,
+                        BinaryOp.Subtract => (ic * -1) + val,
+                        _ => throw new NotSupportedException($"Scalar Left operation {op} not optimized for Int yet.")
+                    };
+                }
+                else
+                {
+                    return op switch
+                    {
+                        BinaryOp.Add => ic + val,
+                        BinaryOp.Subtract => ic - val,
+                        BinaryOp.Multiply => ic * val,
+                        BinaryOp.Divide => ic / val,
+                        _ => throw new NotSupportedException($"Op {op} not supported")
+                    };
+                }
+            }
+
+            throw new NotSupportedException($"Scalar math not supported for column type {col.DataType.Name}");
         }
 
         private static DoubleColumn ConvertIntToDouble(IntColumn ic)

@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
-using DuckDB.NET.Data;
+using LeichtFrame.Core.Operations.Filter;
+
 
 namespace LeichtFrame.Benchmarks
 {
