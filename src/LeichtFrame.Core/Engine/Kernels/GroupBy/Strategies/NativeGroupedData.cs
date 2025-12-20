@@ -1,3 +1,5 @@
+using LeichtFrame.Core.Engine.Memory;
+
 namespace LeichtFrame.Core.Engine
 {
     /// <summary>

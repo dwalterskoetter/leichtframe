@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Text;
-using LeichtFrame.Core.Engine;
+using LeichtFrame.Core.Engine.Memory;
 
 namespace LeichtFrame.Core
 {

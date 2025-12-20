@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Filter
 {
     /// <summary>
     /// Provides extension methods for filtering <see cref="DataFrame"/> rows based on predicates.

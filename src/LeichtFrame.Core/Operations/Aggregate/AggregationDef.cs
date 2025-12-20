@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Aggregate
 {
     /// <summary>
     /// Defines the supported aggregation operations.

@@ -1,5 +1,3 @@
-using LeichtFrame.Core;
-
 namespace LeichtFrame.Core.Tests.DataFrames.Operations
 {
     public class AdvancedAggregationTests

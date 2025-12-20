@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Aggregate
 {
     /// <summary>
     /// Provides extension methods for performing aggregations on grouped dataframes.
@@ -406,28 +406,72 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Performs multiple aggregations on the grouped DataFrame in a single pass.
-        /// Reconstructs keys using representative rows to avoid storing key objects.
+        /// intelligently reconstructs keys from representative rows for multi-column grouping.
         /// </summary>
         /// <param name="gdf">The grouped DataFrame.</param>
         /// <param name="aggregations">The list of aggregations to perform.</param>
         /// <returns>A new DataFrame containing keys and aggregated results.</returns>
+        // =======================================================================
+        // STATE-OF-THE-ART SINGLE-PASS AGGREGATION
+        // =======================================================================
+
         public static DataFrame Aggregate(this GroupedDataFrame gdf, params AggregationDef[] aggregations)
         {
             int groupCount = gdf.GroupCount;
-            // Assuming no null group for basic implementation, can be added later
             int totalRows = groupCount + (gdf.NullGroupIndices != null ? 1 : 0);
 
             var resultCols = new List<IColumn>();
 
-            // 1. Prepare Key Columns
-            foreach (var colName in gdf.GroupColumnNames)
+            // =========================================================
+            // PHASE 1: RECONSTRUCT KEYS
+            // =========================================================
+            var keysArray = gdf.GetKeys();
+
+            bool isRowIndexKey = gdf is GroupedDataFrame<int> && gdf.GroupColumnNames.Length > 1;
+
+            if (isRowIndexKey)
             {
-                var sourceCol = gdf.Source[colName];
-                var keyCol = ColumnFactory.Create(colName, sourceCol.DataType, totalRows);
+                // -- Case A: Multi-Column (Lookup values via Row Index) --
+                int[] rowIndices = (int[])keysArray;
+
+                foreach (var colName in gdf.GroupColumnNames)
+                {
+                    var sourceCol = gdf.Source[colName];
+
+                    bool isNullable = sourceCol.IsNullable || gdf.NullGroupIndices != null;
+
+                    var keyCol = ColumnFactory.Create(colName, sourceCol.DataType, totalRows, isNullable: isNullable);
+
+                    // 1. Fill valid groups using representative row
+                    for (int i = 0; i < rowIndices.Length; i++)
+                    {
+                        keyCol.AppendObject(sourceCol.GetValue(rowIndices[i]));
+                    }
+
+                    resultCols.Add(keyCol);
+                }
+            }
+            else
+            {
+                // -- Case B: Single Column (Keys are actual values) --
+                string colName = gdf.GroupColumnNames[0];
+                Type keyType = keysArray.GetType().GetElementType()!;
+
+                bool isNullable = gdf.NullGroupIndices != null;
+
+                var keyCol = ColumnFactory.Create(colName, keyType, totalRows, isNullable: isNullable);
+
+                for (int i = 0; i < keysArray.Length; i++)
+                {
+                    keyCol.AppendObject(keysArray.GetValue(i));
+                }
+
                 resultCols.Add(keyCol);
             }
 
-            // 2. Prepare Target Columns
+            // =========================================================
+            // PHASE 2: PREPARE AGGREGATION COLUMNS
+            // =========================================================
             var aggTargetCols = new IColumn[aggregations.Length];
             for (int i = 0; i < aggregations.Length; i++)
             {
@@ -441,11 +485,12 @@ namespace LeichtFrame.Core
                 };
 
                 aggTargetCols[i] = ColumnFactory.Create(agg.TargetName, targetType, totalRows, isNullable: true);
-
                 resultCols.Add(aggTargetCols[i]);
             }
 
-            // 3. Single-Pass Execution
+            // =========================================================
+            // PHASE 3: CALCULATE AGGREGATES (Scan CSR)
+            // =========================================================
             var offsets = gdf.GroupOffsets;
             var indices = gdf.RowIndices;
 
@@ -454,24 +499,6 @@ namespace LeichtFrame.Core
                 int start = offsets[g];
                 int end = offsets[g + 1];
 
-                // A) Reconstruct Keys (Representative Row Trick)
-                if (end > start)
-                {
-                    int representativeRow = indices[start];
-                    for (int k = 0; k < gdf.GroupColumnNames.Length; k++)
-                    {
-                        var colName = gdf.GroupColumnNames[k];
-                        var val = gdf.Source[colName].GetValue(representativeRow);
-                        resultCols[k].AppendObject(val);
-                    }
-                }
-                else
-                {
-                    for (int k = 0; k < gdf.GroupColumnNames.Length; k++)
-                        resultCols[k].AppendObject(null);
-                }
-
-                // B) Calculate Aggregations
                 for (int a = 0; a < aggregations.Length; a++)
                 {
                     var agg = aggregations[a];
@@ -480,14 +507,18 @@ namespace LeichtFrame.Core
                 }
             }
 
-            // 4. Handle Null Group if exists
+            // =========================================================
+            // PHASE 4: HANDLE NULL GROUP
+            // =========================================================
             if (gdf.NullGroupIndices is int[] nullIndices)
             {
-                // Keys are null
+                // 1. Append Null to all Key Columns
                 for (int k = 0; k < gdf.GroupColumnNames.Length; k++)
+                {
                     resultCols[k].AppendObject(null);
+                }
 
-                // Values
+                // 2. Calculate Aggregates for Null Group
                 for (int a = 0; a < aggregations.Length; a++)
                 {
                     aggTargetCols[a].AppendObject(
@@ -571,23 +602,52 @@ namespace LeichtFrame.Core
 
         private static DataFrame CreateResultDataFrame(GroupedDataFrame gdf, string valColName, IColumn valCol)
         {
-            // Note: This relies on GetKeys() returning keys for the primary column
-            var keysArray = gdf.GetKeys();
-            var type = keysArray.GetType().GetElementType()!;
+            // NEW: Support for Multi-Column Key Reconstruction via Representative Row
 
+            var resultCols = new List<IColumn>();
             int totalCount = gdf.GroupCount + (gdf.NullGroupIndices != null ? 1 : 0);
+            var keysArray = gdf.GetKeys();
 
-            // FIX: Use [0] for the column name
-            var keyCol = ColumnFactory.Create(gdf.GroupColumnNames[0], type, totalCount, isNullable: true);
+            // Check if Multi-Column Strategy (Keys are Row Indices)
+            bool isRowIndexKey = gdf is GroupedDataFrame<int> && gdf.GroupColumnNames.Length > 1;
 
-            foreach (var key in keysArray) keyCol.AppendObject(key);
-
-            if (gdf.NullGroupIndices != null)
+            if (isRowIndexKey)
             {
-                keyCol.AppendObject(null);
+                int[] rowIndices = (int[])keysArray;
+                foreach (var colName in gdf.GroupColumnNames)
+                {
+                    var sourceCol = gdf.Source[colName];
+                    var keyCol = ColumnFactory.Create(colName, sourceCol.DataType, totalCount, isNullable: true); // Nullable for safety
+
+                    // Valid Groups
+                    for (int i = 0; i < rowIndices.Length; i++)
+                    {
+                        keyCol.AppendObject(sourceCol.GetValue(rowIndices[i]));
+                    }
+                    // Null Group
+                    if (gdf.NullGroupIndices != null) keyCol.AppendObject(null);
+
+                    resultCols.Add(keyCol);
+                }
+            }
+            else
+            {
+                // Single Column Strategy (Keys are values)
+                // Note: GetKeys returns Array, we assume element type matches column type
+                var colName = gdf.GroupColumnNames[0];
+                var keyType = keysArray.GetType().GetElementType()!;
+                var keyCol = ColumnFactory.Create(colName, keyType, totalCount, isNullable: true);
+
+                foreach (var key in keysArray) keyCol.AppendObject(key);
+                if (gdf.NullGroupIndices != null) keyCol.AppendObject(null);
+
+                resultCols.Add(keyCol);
             }
 
-            return new DataFrame(new[] { keyCol, valCol });
+            // Add the calculated Value Column (Count, Sum, etc.)
+            resultCols.Add(valCol);
+
+            return new DataFrame(resultCols);
         }
     }
 }

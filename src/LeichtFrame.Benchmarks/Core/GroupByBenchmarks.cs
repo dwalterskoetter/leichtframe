@@ -1,5 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using LeichtFrame.Core.Operations.GroupBy;
+using LeichtFrame.Core.Operations.Aggregate;
 
 namespace LeichtFrame.Benchmarks
 {

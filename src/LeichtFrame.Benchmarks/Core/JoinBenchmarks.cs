@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using LeichtFrame.Core;
+using LeichtFrame.Core.Operations.Join;
 
 namespace LeichtFrame.Benchmarks
 {

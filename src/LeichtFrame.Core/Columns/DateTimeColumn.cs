@@ -1,5 +1,5 @@
 using System.Buffers;
-using LeichtFrame.Core.Engine;
+using LeichtFrame.Core.Engine.Memory;
 
 namespace LeichtFrame.Core
 {

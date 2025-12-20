@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace LeichtFrame.Core.Engine
+namespace LeichtFrame.Core.Engine.Memory
 {
     /// <summary>
     /// Wrapper around NativeMemory to avoid GC pressure for large internal buffers.

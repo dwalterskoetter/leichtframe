@@ -1,4 +1,4 @@
-namespace LeichtFrame.Core
+namespace LeichtFrame.Core.Operations.Sort
 {
     /// <summary>
     /// Provides extension methods for sorting DataFrames.

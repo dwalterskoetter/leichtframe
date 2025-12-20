@@ -1,6 +1,4 @@
-using LeichtFrame.Core;
-using LeichtFrame.Core.Expressions;
-using static LeichtFrame.Core.Expressions.F; // Importiert Col, Lit, Sum, etc.
+using static LeichtFrame.Core.Expressions.F;
 
 namespace LeichtFrame.Core.Tests.Lazy
 {
@@ -23,7 +21,8 @@ namespace LeichtFrame.Core.Tests.Lazy
 
             // Act: SELECT Dept, SUM(Salary) as Total FROM df GROUP BY Dept
             var result = df.Lazy()
-                           .GroupBy("Dept", Sum(Col("Salary")).As("Total"))
+                           .GroupBy("Dept")
+                           .Agg(Sum(Col("Salary")).As("Total"))
                            .Collect();
 
             // Assert
@@ -52,7 +51,8 @@ namespace LeichtFrame.Core.Tests.Lazy
 
             // Act: Min, Max, Count, Mean
             var result = df.Lazy()
-                           .GroupBy("Id",
+                           .GroupBy("Id")
+                           .Agg(
                                Min(Col("Val")).As("MinVal"),
                                Max(Col("Val")).As("MaxVal"),
                                Count().As("Count"),
@@ -192,9 +192,8 @@ namespace LeichtFrame.Core.Tests.Lazy
             var result = orders.Lazy()
                 .Where(Col("Amount") > 10.0) // Filter out the 5.0
                 .Join(products.Lazy(), "ProdId")
-                .GroupBy("Category",
-                    Sum(Col("Amount")).As("TotalSales")
-                )
+                .GroupBy("Category")
+                .Agg(Sum(Col("Amount")).As("TotalSales"))
                 .OrderByDescending("TotalSales")
                 .Collect();
 
