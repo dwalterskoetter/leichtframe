@@ -75,19 +75,21 @@ namespace LeichtFrame.Core
         }
 
         /// <summary>
-        /// Sorts the DataFrame.
+        /// Sorts by one or more columns (Ascending).
         /// </summary>
-        public LazyDataFrame OrderBy(string column)
+        public LazyDataFrame OrderBy(params string[] columns)
         {
-            return new LazyDataFrame(new Sort(Plan, column, true));
+            var sortDefs = columns.Select(name => (name, true)).ToList();
+            return new LazyDataFrame(new Sort(Plan, sortDefs));
         }
 
         /// <summary>
-        /// Sorts the DataFrame by the specified column in descending order.
+        /// Sorts by one or more columns (Descending).
         /// </summary>
-        public LazyDataFrame OrderByDescending(string column)
+        public LazyDataFrame OrderByDescending(params string[] columns)
         {
-            return new LazyDataFrame(new Sort(Plan, column, false));
+            var sortDefs = columns.Select(name => (name, false)).ToList();
+            return new LazyDataFrame(new Sort(Plan, sortDefs));
         }
 
         // --- Materialization ---

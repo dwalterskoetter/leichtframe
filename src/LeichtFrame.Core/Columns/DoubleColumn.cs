@@ -483,5 +483,17 @@ namespace LeichtFrame.Core
             }
             return hasVal ? max : null;
         }
+
+        /// <summary>
+        /// Internal Move-Constructor for Kernel Fusion.
+        /// Adopts the provided array as internal storage without copying.
+        /// </summary>
+        internal DoubleColumn(string name, double[] adoptedData, int length)
+            : base(name, isNullable: false)
+        {
+            _data = adoptedData;
+            _length = length;
+            _nulls = null;
+        }
     }
 }

@@ -69,13 +69,18 @@ namespace LeichtFrame.Core.Plans
     }
 
     /// <summary>
-    /// Represents a sorting operation.
+    /// Represents a sorting operation (Multi-Column supported).
     /// </summary>
-    public record Sort(LogicalPlan Input, string ColumnName, bool Ascending) : LogicalPlan
+    public record Sort(LogicalPlan Input, List<(string Name, bool Ascending)> SortColumns) : LogicalPlan
     {
-        /// <inheritdoc/>
+        /// <summary>
+        /// Logical plan children
+        /// </summary>
         public override LogicalPlan[] Children => new[] { Input };
-        /// <inheritdoc/>
+
+        /// <summary>
+        /// Logical plan output schema
+        /// </summary>
         public override DataFrameSchema OutputSchema => Input.OutputSchema;
     }
 }

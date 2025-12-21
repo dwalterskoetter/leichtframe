@@ -5,6 +5,7 @@ using LeichtFrame.Core.Operations.Filter;
 using LeichtFrame.Core.Operations.Join;
 using LeichtFrame.Core.Operations.Sort;
 using LeichtFrame.Core.Operations.GroupBy;
+using LeichtFrame.Core.Operations.Transform;
 
 namespace LeichtFrame.Core.Execution
 {
@@ -51,18 +52,16 @@ namespace LeichtFrame.Core.Execution
         private DataFrame ExecuteProjection(Projection node)
         {
             var inputDf = Execute(node.Input);
-
             var newColumns = new List<IColumn>();
+
             foreach (var expr in node.Expressions)
             {
                 var resultCol = Evaluator.Evaluate(expr, inputDf);
-
                 string targetName = expr is AliasExpr a ? a.Alias : resultCol.Name;
 
-                // Rename if alias differs from physical name
                 if (resultCol.Name != targetName)
                 {
-                    resultCol = RenameColumn(resultCol, targetName);
+                    resultCol = resultCol.Rename(targetName);
                 }
 
                 newColumns.Add(resultCol);
@@ -89,10 +88,6 @@ namespace LeichtFrame.Core.Execution
             using var groupedDf = GroupingOps.GroupBy(inputDf, colNames.ToArray());
 
             // --- PERFORMANCE FAST PATH ---
-            // Condition: 
-            // 1. Only 1 Aggregation
-            // 2. It is Count
-            // 3. FIX: Only Single-Column Grouping (The native Count() kernel currently only supports 1 key col)
             if (node.AggExprs.Count == 1 && colNames.Count == 1)
             {
                 var aggExpr = node.AggExprs[0];
@@ -101,15 +96,14 @@ namespace LeichtFrame.Core.Execution
 
                 if (core is AggExpr ae && ae.Op == AggOpType.Count)
                 {
-                    // Calls GroupAggregationOps.Count() -> Native Access
                     var result = groupedDf.Count();
 
                     if (targetName != "Count")
                     {
                         var countCol = result["Count"];
-                        var renamedCol = RenameColumn(countCol, targetName);
 
-                        // Rebuild DataFrame with new column name
+                        var renamedCol = countCol.Rename(targetName);
+
                         var newCols = new List<IColumn>();
                         foreach (var c in result.Columns)
                         {
@@ -124,7 +118,7 @@ namespace LeichtFrame.Core.Execution
             }
             // -----------------------------
 
-            // 3. General Path (Handles Multi-Column & Complex Aggregations correctly)
+            // 3. General Path
             var aggDefs = new List<AggregationDef>();
 
             foreach (var expr in node.AggExprs)
@@ -164,33 +158,31 @@ namespace LeichtFrame.Core.Execution
         {
             var df = Execute(node.Input);
 
-            if (node.Ascending)
-            {
-                return OrderOps.OrderBy(df, node.ColumnName);
-            }
-            else
-            {
-                return OrderOps.OrderByDescending(df, node.ColumnName);
-            }
+            string[] names = node.SortColumns.Select(x => x.Name).ToArray();
+            bool[] ascending = node.SortColumns.Select(x => x.Ascending).ToArray();
+
+            return OrderOps.OrderBy(df, names, ascending);
         }
 
         // --- Helpers ---
 
         private IColumn RenameColumn(IColumn col, string newName)
         {
-            var newCol = ColumnFactory.Create(newName, col.DataType, col.Length, col.IsNullable);
+            var field = typeof(Column).GetField("<Name>k__BackingField",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
-            for (int i = 0; i < col.Length; i++)
+            if (field != null)
             {
-                if (col.IsNullable && col.IsNull(i))
-                {
-                    newCol.AppendObject(null);
-                }
-                else
-                {
-                    newCol.AppendObject(col.GetValue(i));
-                }
+                field.SetValue(col, newName);
+                return col;
             }
+
+            Console.WriteLine($"Warnung: Slow Rename für {col.Name} -> {newName}");
+            var indices = new int[col.Length];
+            for (int i = 0; i < indices.Length; i++) indices[i] = i;
+
+            var newCol = col.CloneSubset(indices);
+
             return newCol;
         }
 

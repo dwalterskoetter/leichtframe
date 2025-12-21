@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using LeichtFrame.Core.Engine.Memory;
 
 namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 {
@@ -20,20 +19,25 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             for (int i = 0; i < columnNames.Length; i++) columns[i] = df[columnNames[i]];
 
             int* pHashes = (int*)NativeMemory.Alloc((nuint)(rowCount * sizeof(int)));
-            ComputeCombinedHashes(columns, pHashes, rowCount);
 
-            int capacity = GetNextPowerOfTwo(rowCount * 2);
-            int mask = capacity - 1;
-
-            int* pMap = (int*)NativeMemory.Alloc((nuint)(capacity * sizeof(int)));
-            new Span<int>(pMap, capacity).Fill(-1);
-
-            int* pGroupIds = (int*)NativeMemory.Alloc((nuint)(rowCount * sizeof(int)));
-
-            int groupCount = 0;
+            int* pMap = null;
+            int* pGroupIds = null;
 
             try
             {
+                ComputeCombinedHashes(columns, pHashes, rowCount);
+
+                int capacity = GetNextPowerOfTwo(rowCount * 2);
+                if (capacity < 16) capacity = 16;
+                int mask = capacity - 1;
+
+                pMap = (int*)NativeMemory.Alloc((nuint)(capacity * sizeof(int)));
+                new Span<int>(pMap, capacity).Fill(-1);
+
+                pGroupIds = (int*)NativeMemory.Alloc((nuint)(rowCount * sizeof(int)));
+
+                int groupCount = 0;
+
                 for (int i = 0; i < rowCount; i++)
                 {
                     int hash = pHashes[i];
@@ -64,9 +68,9 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             }
             finally
             {
-                NativeMemory.Free(pHashes);
-                NativeMemory.Free(pMap);
-                NativeMemory.Free(pGroupIds);
+                if (pHashes != null) NativeMemory.Free(pHashes);
+                if (pMap != null) NativeMemory.Free(pMap);
+                if (pGroupIds != null) NativeMemory.Free(pGroupIds);
             }
         }
 
@@ -77,21 +81,22 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 
             foreach (var col in columns)
             {
+                const int Multiplier = 397;
+
                 if (col is IntColumn ic)
                 {
                     var span = ic.Values.Span;
                     for (int i = 0; i < rowCount; i++)
                     {
-                        pHashes[i] = pHashes[i] * 31 + span[i];
+                        pHashes[i] = (pHashes[i] * Multiplier) ^ span[i];
                     }
                 }
                 else if (col is StringColumn sc)
                 {
                     for (int i = 0; i < rowCount; i++)
                     {
-                        string? s = sc.Get(i);
-                        int h = s?.GetHashCode() ?? 0;
-                        pHashes[i] = pHashes[i] * 31 + h;
+                        int h = sc.GetHashCodeRaw(i);
+                        pHashes[i] = (pHashes[i] * Multiplier) ^ h;
                     }
                 }
                 else
@@ -100,7 +105,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                     {
                         object? val = col.GetValue(i);
                         int h = val?.GetHashCode() ?? 0;
-                        pHashes[i] = pHashes[i] * 31 + h;
+                        pHashes[i] = (pHashes[i] * Multiplier) ^ h;
                     }
                 }
             }
@@ -117,7 +122,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                 }
                 else if (col is StringColumn sc)
                 {
-                    if (sc.Get(rowA) != sc.Get(rowB)) return false;
+                    if (sc.CompareRaw(rowA, rowB) != 0) return false;
                 }
                 else
                 {

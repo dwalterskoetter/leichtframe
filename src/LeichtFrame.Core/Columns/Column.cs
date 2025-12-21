@@ -54,6 +54,15 @@ public abstract class Column : IColumn
     /// <inheritdoc />
     public abstract void SetNull(int index);
 
+    /// <summary>
+    /// Creates a shallow copy of the column (shares the data buffers).
+    /// Used by the Engine for efficient renaming.
+    /// </summary>
+    internal Column ShallowClone()
+    {
+        return (Column)this.MemberwiseClone();
+    }
+
     // =======================================================================
     // DEFAULT AGGREGATION IMPLEMENTATION (Fallback)
     // =======================================================================
