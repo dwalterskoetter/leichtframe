@@ -218,6 +218,36 @@ namespace LeichtFrame.Core
             return spanA.SequenceCompareTo(spanB);
         }
 
+        /// <summary>
+        /// Computes the hash code of the string at the specified index directly from the byte buffer.
+        /// Zero-Allocation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetHashCodeRaw(int index)
+        {
+            // 1. Null Check
+            if (_nulls != null && _nulls.IsNull(index)) return 0;
+
+            // 2. Locate Bytes
+            int start = _offsets[index];
+            int length = _offsets[index + 1] - start;
+
+            if (length == 0) return string.Empty.GetHashCode();
+
+            // 3. Compute Hash (FNV-1a or similar fast hash)            
+            int hash = unchecked((int)2166136261);
+
+            var span = _values.AsSpan(start, length);
+
+            for (int i = 0; i < span.Length; i++)
+            {
+                hash ^= span[i];
+                hash *= 16777619;
+            }
+
+            return hash;
+        }
+
         // --- INTERNAL ACCESS FOR OPTIMIZED OPS ---
 
         /// <summary>Internal access to raw offsets for high-performance grouping/sorting.</summary>

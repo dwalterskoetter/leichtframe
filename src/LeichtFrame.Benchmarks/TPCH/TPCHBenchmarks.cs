@@ -122,7 +122,7 @@ namespace LeichtFrame.Benchmarks
                     Mean(Col("l_discount")).As("avg_disc"),
                     Count().As("count_order")
                 )
-                .OrderBy("l_returnflag")
+                .OrderBy("l_returnflag", "l_linestatus")
                 .Collect();
         }
 

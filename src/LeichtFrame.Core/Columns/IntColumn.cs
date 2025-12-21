@@ -557,5 +557,16 @@ namespace LeichtFrame.Core
 
             return hasValue ? max : null;
         }
+
+        /// <summary>
+        /// Internal Move-Constructor.
+        /// </summary>
+        internal IntColumn(string name, int[] adoptedData, int length)
+            : base(name, isNullable: false)
+        {
+            _data = adoptedData;
+            _length = length;
+            _nulls = null;
+        }
     }
 }
