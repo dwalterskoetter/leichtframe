@@ -25,6 +25,8 @@ namespace LeichtFrame.Core
         /// </summary>
         internal NativeGroupedData? NativeData { get; set; }
 
+        internal bool KeysAreRowIndices { get; set; } = false;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="GroupedDataFrame"/> class.
         /// </summary>
@@ -64,10 +66,6 @@ namespace LeichtFrame.Core
         /// <returns>An array containing the group keys.</returns>
         public abstract Array GetKeys();
 
-        // -----------------------------------------------------------
-        // KORREKTUR: Methode hierher verschoben (in die Basisklasse)
-        // -----------------------------------------------------------
-
         /// <summary>
         /// Creates a shallow copy of this GroupedDataFrame attached to a new Source DataFrame.
         /// Used internally when injecting computed columns.
@@ -79,7 +77,12 @@ namespace LeichtFrame.Core
             {
                 if (NativeData != null)
                 {
-                    return new GroupedDataFrame<int>(newSource, GroupColumnNames, NativeData);
+                    return new GroupedDataFrame<int>(
+                        newSource,
+                        GroupColumnNames,
+                        NativeData,
+                        gInt.NullGroupIndices
+                    );
                 }
 
                 return new GroupedDataFrame<int>(
@@ -137,9 +140,16 @@ namespace LeichtFrame.Core
         /// <param name="df">The source DataFrame.</param>
         /// <param name="colNames">The column names.</param>
         /// <param name="nativeData">The unmanaged data structure.</param>
-        internal GroupedDataFrame(DataFrame df, string[] colNames, NativeGroupedData nativeData)
+        /// <param name="nullIndices">Optional managed array for null indices.</param>
+        internal GroupedDataFrame(
+            DataFrame df,
+            string[] colNames,
+            NativeGroupedData nativeData,
+            int[]? nullIndices = null)
             : base(df, colNames, nativeData)
         {
+            // [FIX] Wir speichern die Null-Indizes auch im Fast Path
+            _nullGroupIndices = nullIndices;
         }
 
         /// <summary>
@@ -205,23 +215,49 @@ namespace LeichtFrame.Core
         public override int[]? NullGroupIndices => _nullGroupIndices;
 
         /// <inheritdoc />
-        public override Array GetKeys()
+        public unsafe override Array GetKeys()
         {
             if (_keys == null && NativeData != null)
             {
-                if (typeof(TKey) == typeof(int))
+                bool isMultiColumnRowIndex = KeysAreRowIndices && GroupColumnNames.Length > 1;
+
+                if (isMultiColumnRowIndex || (typeof(TKey) == typeof(int) && !KeysAreRowIndices))
+                {
+                    if (typeof(TKey) == typeof(int))
+                    {
+                        int count = NativeData.GroupCount;
+                        int[] intKeys = new int[count];
+                        unsafe
+                        {
+                            Marshal.Copy((nint)NativeData.Keys.Ptr, intKeys, 0, count);
+                        }
+                        _keys = (TKey[])(object)intKeys;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Multi-Column Grouping with NativeData requires GroupedDataFrame<int>.");
+                    }
+                }
+                else if (KeysAreRowIndices)
                 {
                     int count = NativeData.GroupCount;
-                    int[] intKeys = new int[count];
+                    int* ptrKeys = NativeData.Keys.Ptr;
+
+                    var resultKeys = new TKey[count];
+                    var sourceCol = (IColumn<TKey>)Source[GroupColumnNames[0]];
+
                     unsafe
                     {
-                        Marshal.Copy((nint)NativeData.Keys.Ptr, intKeys, 0, count);
+                        for (int i = 0; i < count; i++)
+                        {
+                            resultKeys[i] = sourceCol.GetValue(ptrKeys[i]);
+                        }
                     }
-                    _keys = (TKey[])(object)intKeys;
+                    _keys = resultKeys;
                 }
                 else
                 {
-                    throw new InvalidOperationException($"NativeData is present, but generic type {typeof(TKey).Name} is not supported for native extraction.");
+                    throw new InvalidOperationException($"NativeData present but Type {typeof(TKey).Name} logic undefined.");
                 }
             }
             return _keys!;

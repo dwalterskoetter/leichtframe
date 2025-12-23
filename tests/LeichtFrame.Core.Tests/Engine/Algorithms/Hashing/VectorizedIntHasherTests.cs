@@ -1,9 +1,6 @@
-using LeichtFrame.Core;
-using LeichtFrame.Core.Engine;
-
 namespace LeichtFrame.Core.Tests.Engine.Hashing
 {
-    public class VectorizedHasherTests
+    public class VectorizedIntHasherTests
     {
         private static int ExpectedMix(int k)
         {

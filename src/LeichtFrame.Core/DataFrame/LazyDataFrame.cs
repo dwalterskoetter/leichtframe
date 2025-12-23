@@ -106,7 +106,7 @@ namespace LeichtFrame.Core
             return physicalPlanner.Execute(optimizedPlan);
         }
 
-        // --- Aggregation (Corrected API) ---
+        // --- Aggregation ---
 
         /// <summary>
         /// Groups the DataFrame by the specified columns.
@@ -125,6 +125,20 @@ namespace LeichtFrame.Core
         {
             var exprs = cols.Select(c => new ColExpr(c)).Cast<Expr>();
             return new GroupedLazyFrame(this, exprs);
+        }
+
+        // --- Streaming (API) ---
+
+        /// <summary>
+        /// Executes the plan and returns a streaming iterator over the results.
+        /// This avoids materializing the full result DataFrame in memory, which is ideal for large aggregations.
+        /// </summary>
+        public IEnumerable<RowView> CollectStream()
+        {
+            var optimizer = new OptimizerEngine();
+            var optimizedPlan = optimizer.Optimize(Plan);
+
+            return PhysicalStreamer.Execute(optimizedPlan);
         }
     }
 }
