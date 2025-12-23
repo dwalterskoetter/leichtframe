@@ -2,12 +2,12 @@ using System.Runtime.InteropServices;
 
 namespace LeichtFrame.Core.Engine
 {
-    internal unsafe class PolarsStyleLowCardStrategy : IGroupByStrategy
+    internal unsafe class DirectAddressingStrategy : IGroupByStrategy
     {
         private readonly int? _knownMin;
         private readonly int? _knownMax;
 
-        public PolarsStyleLowCardStrategy(int? min = null, int? max = null)
+        public DirectAddressingStrategy(int? min = null, int? max = null)
         {
             _knownMin = min;
             _knownMax = max;
@@ -17,25 +17,13 @@ namespace LeichtFrame.Core.Engine
         {
             var col = (IntColumn)df[columnName];
 
-            // 1. Alles Nativ berechnen
             NativeGroupedData nativeData = ComputeNative(col, df.RowCount);
 
-            // 2. KEIN COPY! KEIN DISPOSE!
-            // Wir übergeben den Besitz (Ownership) an den DataFrame.
-            // Der DataFrame ruft Dispose() auf nativeData auf, wenn er selbst disposed wird (nach Aggregation).
-
-            return new GroupedDataFrame<int>(df, new[] { columnName }, nativeData);
+            return new GroupedDataFrame<int>(df, new[] { columnName }, nativeData, null);
         }
 
         internal NativeGroupedData ComputeNative(IntColumn col, int rowCount)
         {
-            // ... (Dieser Teil bleibt exakt gleich wie in deinem Code) ...
-            // ... ComputeHistograms ... PrefixSum ... Scatter ...
-
-            // WICHTIG: Kein finally { Dispose } für das result Object hier!
-            // Das Resultat muss leben bleiben.
-
-            // Hier der gekürzte Body, da er unverändert ist:
             if (rowCount == 0) return new NativeGroupedData(0, 0);
 
             int min = _knownMin ?? col.Min();
@@ -93,7 +81,6 @@ namespace LeichtFrame.Core.Engine
             }
             finally
             {
-                // Nur die temporären Buffer aufräumen!
                 NativeMemory.Free(pGlobalHistograms);
                 NativeMemory.Free(pWriteOffsets);
             }

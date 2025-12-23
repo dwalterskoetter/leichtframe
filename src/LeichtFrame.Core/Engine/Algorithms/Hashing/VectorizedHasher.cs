@@ -6,7 +6,6 @@ namespace LeichtFrame.Core.Engine
 {
     internal static unsafe class VectorizedHasher
     {
-        // Murmur3 32-bit finalizer constants
         private const int C1 = unchecked((int)0x85ebca6b);
         private const int C2 = unchecked((int)0xc2b2ae35);
 
@@ -49,6 +48,36 @@ namespace LeichtFrame.Core.Engine
                     pHashes[i] = MixScalar(pInput[i]);
                 }
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static void HashStrings(
+            byte* globalBytes,
+            int* offsets,
+            int* hashes,
+            int count)
+        {
+            const int FnvOffsetBasis = unchecked((int)2166136261);
+            const int FnvPrime = 16777619;
+
+            Parallel.For(0, count, i =>
+            {
+                int start = offsets[i];
+                int end = offsets[i + 1];
+                int len = end - start;
+
+                int hash = FnvOffsetBasis;
+
+                byte* pStr = globalBytes + start;
+
+                for (int k = 0; k < len; k++)
+                {
+                    hash ^= pStr[k];
+                    hash *= FnvPrime;
+                }
+
+                hashes[i] = hash;
+            });
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

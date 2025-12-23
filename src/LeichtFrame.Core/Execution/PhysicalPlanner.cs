@@ -164,6 +164,37 @@ namespace LeichtFrame.Core.Execution
             return OrderOps.OrderBy(df, names, ascending);
         }
 
+        /// <summary>
+        /// Helper to map logical expressions to physical aggregation definitions.
+        /// Exposed internally for PhysicalStreamer.
+        /// </summary>
+        internal AggregationDef[] MapAggregations(List<Expr> aggExprs)
+        {
+            var aggDefs = new List<AggregationDef>();
+            foreach (var expr in aggExprs)
+            {
+                string targetName = expr is AliasExpr a ? a.Alias : "Agg";
+                Expr coreExpr = expr is AliasExpr aliasExpr ? aliasExpr.Child : expr;
+
+                if (coreExpr is AggExpr agg)
+                {
+                    string sourceCol = agg.Child is ColExpr c ? c.Name : "";
+
+                    var def = agg.Op switch
+                    {
+                        AggOpType.Sum => Agg.Sum(sourceCol, targetName),
+                        AggOpType.Min => Agg.Min(sourceCol, targetName),
+                        AggOpType.Max => Agg.Max(sourceCol, targetName),
+                        AggOpType.Mean => Agg.Mean(sourceCol, targetName),
+                        AggOpType.Count => Agg.Count(targetName),
+                        _ => throw new NotImplementedException($"Agg op {agg.Op} not supported")
+                    };
+                    aggDefs.Add(def);
+                }
+            }
+            return aggDefs.ToArray();
+        }
+
         // --- Helpers ---
 
         private IColumn RenameColumn(IColumn col, string newName)

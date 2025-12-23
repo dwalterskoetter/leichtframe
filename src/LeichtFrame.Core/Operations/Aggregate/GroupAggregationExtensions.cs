@@ -18,10 +18,14 @@ namespace LeichtFrame.Core.Operations.Aggregate
         public static DataFrame Count(this GroupedDataFrame gdf)
         {
             // --- FAST PATH: Native Memory (Zero-Alloc) ---
-            if (gdf.NativeData != null)
+            if (gdf.NativeData != null && !gdf.KeysAreRowIndices)
             {
                 var native = gdf.NativeData;
-                var nativeCounts = new IntColumn("Count", native.GroupCount);
+                bool hasNulls = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
+                int totalRows = native.GroupCount + (hasNulls ? 1 : 0);
+
+                var nativeCounts = new IntColumn("Count", totalRows);
+                var keyCol = new IntColumn(gdf.GroupColumnNames[0], totalRows, isNullable: hasNulls);
 
                 unsafe
                 {
@@ -31,29 +35,32 @@ namespace LeichtFrame.Core.Operations.Aggregate
                     for (int i = 0; i < native.GroupCount; i++)
                     {
                         nativeCounts.Append(offsets[i + 1] - offsets[i]);
+                        keyCol.Append(keys[i]);
                     }
-
-                    // FIX: Use the first column name from the array
-                    var keyCol = new IntColumn(gdf.GroupColumnNames[0], native.GroupCount);
-                    for (int i = 0; i < native.GroupCount; i++) keyCol.Append(keys[i]);
-
-                    return new DataFrame(new IColumn[] { keyCol, nativeCounts });
                 }
+
+                if (hasNulls)
+                {
+                    nativeCounts.Append(gdf.NullGroupIndices!.Length);
+                    keyCol.Append(null);
+                }
+
+                return new DataFrame(new IColumn[] { keyCol, nativeCounts });
             }
 
             // --- SLOW PATH: Managed Arrays (Fallback) ---
             var offsetsManaged = gdf.GroupOffsets;
             var count = gdf.GroupCount;
-            bool hasNulls = gdf.NullGroupIndices != null;
+            bool hasNullsSlow = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
 
-            var countsCol = new IntColumn("Count", count + (hasNulls ? 1 : 0));
+            var countsCol = new IntColumn("Count", count + (hasNullsSlow ? 1 : 0));
 
             for (int i = 0; i < count; i++)
             {
                 countsCol.Append(offsetsManaged[i + 1] - offsetsManaged[i]);
             }
 
-            if (hasNulls)
+            if (hasNullsSlow)
             {
                 countsCol.Append(gdf.NullGroupIndices!.Length);
             }
@@ -67,14 +74,18 @@ namespace LeichtFrame.Core.Operations.Aggregate
         public static DataFrame Sum(this GroupedDataFrame gdf, string aggregateColumnName)
         {
             // --- FAST PATH: Native Memory ---
-            if (gdf.NativeData != null)
+            if (gdf.NativeData != null && !gdf.KeysAreRowIndices)
             {
                 var col = gdf.Source[aggregateColumnName];
 
                 if (col is IntColumn ic)
                 {
                     var native = gdf.NativeData;
-                    var sumCol = new DoubleColumn($"Sum_{aggregateColumnName}", native.GroupCount);
+                    bool hasNulls = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
+                    int totalRows = native.GroupCount + (hasNulls ? 1 : 0);
+
+                    var sumCol = new DoubleColumn($"Sum_{aggregateColumnName}", totalRows);
+                    var keyCol = new IntColumn(gdf.GroupColumnNames[0], totalRows, isNullable: hasNulls);
 
                     unsafe
                     {
@@ -95,15 +106,21 @@ namespace LeichtFrame.Core.Operations.Aggregate
                                     sum += pSource[pIndices[k]];
                                 }
                                 sumCol.Append(sum);
+                                keyCol.Append(pKeys[i]);
                             }
                         }
-
-                        // FIX: Use the first column name from the array
-                        var keyCol = new IntColumn(gdf.GroupColumnNames[0], native.GroupCount);
-                        for (int i = 0; i < native.GroupCount; i++) keyCol.Append(pKeys[i]);
-
-                        return new DataFrame(new IColumn[] { keyCol, sumCol });
                     }
+
+                    if (hasNulls)
+                    {
+                        long sumNull = 0;
+                        var span = ic.Values.Span;
+                        foreach (var idx in gdf.NullGroupIndices!) sumNull += span[idx];
+                        sumCol.Append(sumNull);
+                        keyCol.Append(null);
+                    }
+
+                    return new DataFrame(new IColumn[] { keyCol, sumCol });
                 }
             }
 
@@ -135,13 +152,17 @@ namespace LeichtFrame.Core.Operations.Aggregate
         /// </summary>
         public static DataFrame Min(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            if (gdf.NativeData != null)
+            if (gdf.NativeData != null && !gdf.KeysAreRowIndices)
             {
                 var col = gdf.Source[aggregateColumnName];
                 if (col is IntColumn ic)
                 {
                     var native = gdf.NativeData;
-                    var minCol = new IntColumn($"Min_{aggregateColumnName}", native.GroupCount);
+                    bool hasNulls = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
+                    int totalRows = native.GroupCount + (hasNulls ? 1 : 0);
+
+                    var minCol = new IntColumn($"Min_{aggregateColumnName}", totalRows);
+                    var keyCol = new IntColumn(gdf.GroupColumnNames[0], totalRows, isNullable: hasNulls);
 
                     unsafe
                     {
@@ -155,8 +176,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
                             {
                                 int start = pOffsets[i];
                                 int end = pOffsets[i + 1];
-
-                                if (start == end) { minCol.Append(0); continue; }
+                                if (start == end) { minCol.Append(0); keyCol.Append(pKeys[i]); continue; }
 
                                 int min = int.MaxValue;
                                 for (int k = start; k < end; k++)
@@ -165,13 +185,21 @@ namespace LeichtFrame.Core.Operations.Aggregate
                                     if (val < min) min = val;
                                 }
                                 minCol.Append(min);
+                                keyCol.Append(pKeys[i]);
                             }
                         }
-                        // FIX: Use the first column name
-                        var keyCol = new IntColumn(gdf.GroupColumnNames[0], native.GroupCount);
-                        for (int i = 0; i < native.GroupCount; i++) keyCol.Append(pKeys[i]);
-                        return new DataFrame(new IColumn[] { keyCol, minCol });
                     }
+
+                    if (hasNulls)
+                    {
+                        int min = int.MaxValue;
+                        var span = ic.Values.Span;
+                        foreach (var idx in gdf.NullGroupIndices!) if (span[idx] < min) min = span[idx];
+                        minCol.Append(min);
+                        keyCol.Append(null);
+                    }
+
+                    return new DataFrame(new IColumn[] { keyCol, minCol });
                 }
             }
 
@@ -214,13 +242,17 @@ namespace LeichtFrame.Core.Operations.Aggregate
         /// </summary>
         public static DataFrame Max(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            if (gdf.NativeData != null)
+            if (gdf.NativeData != null && !gdf.KeysAreRowIndices)
             {
                 var col = gdf.Source[aggregateColumnName];
                 if (col is IntColumn ic)
                 {
                     var native = gdf.NativeData;
-                    var maxCol = new IntColumn($"Max_{aggregateColumnName}", native.GroupCount);
+                    bool hasNulls = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
+                    int totalRows = native.GroupCount + (hasNulls ? 1 : 0);
+
+                    var maxCol = new IntColumn($"Max_{aggregateColumnName}", totalRows);
+                    var keyCol = new IntColumn(gdf.GroupColumnNames[0], totalRows, isNullable: hasNulls);
 
                     unsafe
                     {
@@ -234,8 +266,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
                             {
                                 int start = pOffsets[i];
                                 int end = pOffsets[i + 1];
-
-                                if (start == end) { maxCol.Append(0); continue; }
+                                if (start == end) { maxCol.Append(0); keyCol.Append(pKeys[i]); continue; }
 
                                 int max = int.MinValue;
                                 for (int k = start; k < end; k++)
@@ -244,13 +275,21 @@ namespace LeichtFrame.Core.Operations.Aggregate
                                     if (val > max) max = val;
                                 }
                                 maxCol.Append(max);
+                                keyCol.Append(pKeys[i]);
                             }
                         }
-                        // FIX: Use the first column name
-                        var keyCol = new IntColumn(gdf.GroupColumnNames[0], native.GroupCount);
-                        for (int i = 0; i < native.GroupCount; i++) keyCol.Append(pKeys[i]);
-                        return new DataFrame(new IColumn[] { keyCol, maxCol });
                     }
+
+                    if (hasNulls)
+                    {
+                        int max = int.MinValue;
+                        var span = ic.Values.Span;
+                        foreach (var idx in gdf.NullGroupIndices!) if (span[idx] > max) max = span[idx];
+                        maxCol.Append(max);
+                        keyCol.Append(null);
+                    }
+
+                    return new DataFrame(new IColumn[] { keyCol, maxCol });
                 }
             }
 
@@ -293,13 +332,17 @@ namespace LeichtFrame.Core.Operations.Aggregate
         /// </summary>
         public static DataFrame Mean(this GroupedDataFrame gdf, string aggregateColumnName)
         {
-            if (gdf.NativeData != null)
+            if (gdf.NativeData != null && !gdf.KeysAreRowIndices)
             {
                 var col = gdf.Source[aggregateColumnName];
                 if (col is IntColumn ic)
                 {
                     var native = gdf.NativeData;
-                    var meanCol = new DoubleColumn($"Mean_{aggregateColumnName}", native.GroupCount);
+                    bool hasNulls = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
+                    int totalRows = native.GroupCount + (hasNulls ? 1 : 0);
+
+                    var meanCol = new DoubleColumn($"Mean_{aggregateColumnName}", totalRows);
+                    var keyCol = new IntColumn(gdf.GroupColumnNames[0], totalRows, isNullable: hasNulls);
 
                     unsafe
                     {
@@ -315,7 +358,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
                                 int end = pOffsets[i + 1];
                                 int count = end - start;
 
-                                if (count == 0) { meanCol.Append(0); continue; }
+                                if (count == 0) { meanCol.Append(0); keyCol.Append(pKeys[i]); continue; }
 
                                 double sum = 0;
                                 for (int k = start; k < end; k++)
@@ -323,13 +366,22 @@ namespace LeichtFrame.Core.Operations.Aggregate
                                     sum += pSource[pIndices[k]];
                                 }
                                 meanCol.Append(sum / count);
+                                keyCol.Append(pKeys[i]);
                             }
                         }
-                        // FIX: Use the first column name
-                        var keyCol = new IntColumn(gdf.GroupColumnNames[0], native.GroupCount);
-                        for (int i = 0; i < native.GroupCount; i++) keyCol.Append(pKeys[i]);
-                        return new DataFrame(new IColumn[] { keyCol, meanCol });
                     }
+
+                    if (hasNulls)
+                    {
+                        double sum = 0;
+                        int count = gdf.NullGroupIndices!.Length;
+                        var span = ic.Values.Span;
+                        foreach (var idx in gdf.NullGroupIndices!) sum += span[idx];
+                        meanCol.Append(count == 0 ? 0 : sum / count);
+                        keyCol.Append(null);
+                    }
+
+                    return new DataFrame(new IColumn[] { keyCol, meanCol });
                 }
             }
 
@@ -338,9 +390,9 @@ namespace LeichtFrame.Core.Operations.Aggregate
             int groupCount = gdf.GroupCount;
             var offsets = gdf.GroupOffsets;
             var indices = gdf.RowIndices;
-            bool hasNulls = gdf.NullGroupIndices != null;
+            bool hasNullsSlow = gdf.NullGroupIndices != null;
 
-            var res = new DoubleColumn($"Mean_{aggregateColumnName}", groupCount + (hasNulls ? 1 : 0));
+            var res = new DoubleColumn($"Mean_{aggregateColumnName}", groupCount + (hasNullsSlow ? 1 : 0));
 
             if (colManaged is IntColumn icManaged)
             {
@@ -360,7 +412,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
                     }
                     res.Append(count == 0 ? 0 : sum / count);
                 }
-                if (hasNulls)
+                if (hasNullsSlow)
                 {
                     double sum = 0; int cnt = 0;
                     foreach (var idx in gdf.NullGroupIndices!) { sum += data[idx]; cnt++; }
@@ -385,7 +437,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
                     }
                     res.Append(count == 0 ? 0 : sum / count);
                 }
-                if (hasNulls)
+                if (hasNullsSlow)
                 {
                     double sum = 0; int cnt = 0;
                     foreach (var idx in gdf.NullGroupIndices!) { sum += data[idx]; cnt++; }
@@ -401,20 +453,15 @@ namespace LeichtFrame.Core.Operations.Aggregate
         }
 
         // =======================================================================
-        // STATE-OF-THE-ART SINGLE-PASS AGGREGATION
+        // AGGREGATE (GENERAL)
         // =======================================================================
 
         /// <summary>
-        /// Performs multiple aggregations on the grouped DataFrame in a single pass.
-        /// intelligently reconstructs keys from representative rows for multi-column grouping.
+        /// Aggregation DataFrame
         /// </summary>
-        /// <param name="gdf">The grouped DataFrame.</param>
-        /// <param name="aggregations">The list of aggregations to perform.</param>
-        /// <returns>A new DataFrame containing keys and aggregated results.</returns>
-        // =======================================================================
-        // STATE-OF-THE-ART SINGLE-PASS AGGREGATION
-        // =======================================================================
-
+        /// <param name="gdf"></param>
+        /// <param name="aggregations"></param>
+        /// <returns></returns>
         public static DataFrame Aggregate(this GroupedDataFrame gdf, params AggregationDef[] aggregations)
         {
             int groupCount = gdf.GroupCount;
@@ -427,36 +474,30 @@ namespace LeichtFrame.Core.Operations.Aggregate
             // =========================================================
             var keysArray = gdf.GetKeys();
 
-            bool isRowIndexKey = gdf is GroupedDataFrame<int> && gdf.GroupColumnNames.Length > 1;
+            bool isRowIndexKeyMultiCol = (gdf.KeysAreRowIndices && gdf.GroupColumnNames.Length > 1)
+                          || (gdf is GroupedDataFrame<int> && gdf.GroupColumnNames.Length > 1 && !gdf.KeysAreRowIndices);
 
-            if (isRowIndexKey)
+            if (isRowIndexKeyMultiCol)
             {
-                // -- Case A: Multi-Column (Lookup values via Row Index) --
                 int[] rowIndices = (int[])keysArray;
 
                 foreach (var colName in gdf.GroupColumnNames)
                 {
                     var sourceCol = gdf.Source[colName];
-
                     bool isNullable = sourceCol.IsNullable || gdf.NullGroupIndices != null;
-
                     var keyCol = ColumnFactory.Create(colName, sourceCol.DataType, totalRows, isNullable: isNullable);
 
-                    // 1. Fill valid groups using representative row
                     for (int i = 0; i < rowIndices.Length; i++)
                     {
                         keyCol.AppendObject(sourceCol.GetValue(rowIndices[i]));
                     }
-
                     resultCols.Add(keyCol);
                 }
             }
             else
             {
-                // -- Case B: Single Column (Keys are actual values) --
                 string colName = gdf.GroupColumnNames[0];
                 Type keyType = keysArray.GetType().GetElementType()!;
-
                 bool isNullable = gdf.NullGroupIndices != null;
 
                 var keyCol = ColumnFactory.Create(colName, keyType, totalRows, isNullable: isNullable);
@@ -465,7 +506,6 @@ namespace LeichtFrame.Core.Operations.Aggregate
                 {
                     keyCol.AppendObject(keysArray.GetValue(i));
                 }
-
                 resultCols.Add(keyCol);
             }
 
@@ -489,7 +529,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
             }
 
             // =========================================================
-            // PHASE 3: CALCULATE AGGREGATES (Scan CSR)
+            // PHASE 3: CALCULATE AGGREGATES
             // =========================================================
             var offsets = gdf.GroupOffsets;
             var indices = gdf.RowIndices;
@@ -512,13 +552,13 @@ namespace LeichtFrame.Core.Operations.Aggregate
             // =========================================================
             if (gdf.NullGroupIndices is int[] nullIndices)
             {
-                // 1. Append Null to all Key Columns
+                // Append Null to Keys
                 for (int k = 0; k < gdf.GroupColumnNames.Length; k++)
                 {
                     resultCols[k].AppendObject(null);
                 }
 
-                // 2. Calculate Aggregates for Null Group
+                // Calc Aggs for Nulls
                 for (int a = 0; a < aggregations.Length; a++)
                 {
                     aggTargetCols[a].AppendObject(
@@ -545,8 +585,49 @@ namespace LeichtFrame.Core.Operations.Aggregate
             };
         }
 
-        // --- Core Execution Logic (Managed Fallback Helper) ---
+        // --- Helper: Create Result DataFrame ---
+        private static DataFrame CreateResultDataFrame(GroupedDataFrame gdf, string valColName, IColumn valCol)
+        {
+            var resultCols = new List<IColumn>();
+            int totalCount = gdf.GroupCount + (gdf.NullGroupIndices != null ? 1 : 0);
+            var keysArray = gdf.GetKeys();
+            bool isRowIndexKeyMultiCol = (gdf.KeysAreRowIndices && gdf.GroupColumnNames.Length > 1)
+                          || (gdf is GroupedDataFrame<int> && gdf.GroupColumnNames.Length > 1 && !gdf.KeysAreRowIndices);
 
+            if (isRowIndexKeyMultiCol)
+            {
+                int[] rowIndices = (int[])keysArray;
+                foreach (var colName in gdf.GroupColumnNames)
+                {
+                    var sourceCol = gdf.Source[colName];
+                    var keyCol = ColumnFactory.Create(colName, sourceCol.DataType, totalCount, isNullable: true);
+
+                    for (int i = 0; i < rowIndices.Length; i++)
+                    {
+                        keyCol.AppendObject(sourceCol.GetValue(rowIndices[i]));
+                    }
+                    if (gdf.NullGroupIndices != null) keyCol.AppendObject(null);
+
+                    resultCols.Add(keyCol);
+                }
+            }
+            else
+            {
+                var colName = gdf.GroupColumnNames[0];
+                var keyType = keysArray.GetType().GetElementType()!;
+                var keyCol = ColumnFactory.Create(colName, keyType, totalCount, isNullable: true);
+
+                foreach (var key in keysArray) keyCol.AppendObject(key);
+                if (gdf.NullGroupIndices != null) keyCol.AppendObject(null);
+
+                resultCols.Add(keyCol);
+            }
+
+            resultCols.Add(valCol);
+            return new DataFrame(resultCols);
+        }
+
+        // --- Helper: Generic Numeric Agg Execution ---
         private static DataFrame ExecuteNumericAgg(
             GroupedDataFrame gdf,
             string colName,
@@ -565,6 +646,8 @@ namespace LeichtFrame.Core.Operations.Aggregate
 
             if (col is IntColumn ic)
             {
+                // Falls Operation double returniert (Mean), wird das hier berücksichtigt?
+                // Derzeit wird DoubleColumn für alle Ergebnisse genutzt in diesem Helper.
                 var res = new DoubleColumn($"{opName}_{colName}", groupCount + (hasNulls ? 1 : 0));
                 ReadOnlySpan<int> data = ic.Values.Span;
 
@@ -598,56 +681,6 @@ namespace LeichtFrame.Core.Operations.Aggregate
             else throw new NotSupportedException($"Operation {opName} not supported for {col.DataType.Name}");
 
             return CreateResultDataFrame(gdf, $"{opName}_{colName}", resultCol);
-        }
-
-        private static DataFrame CreateResultDataFrame(GroupedDataFrame gdf, string valColName, IColumn valCol)
-        {
-            // NEW: Support for Multi-Column Key Reconstruction via Representative Row
-
-            var resultCols = new List<IColumn>();
-            int totalCount = gdf.GroupCount + (gdf.NullGroupIndices != null ? 1 : 0);
-            var keysArray = gdf.GetKeys();
-
-            // Check if Multi-Column Strategy (Keys are Row Indices)
-            bool isRowIndexKey = gdf is GroupedDataFrame<int> && gdf.GroupColumnNames.Length > 1;
-
-            if (isRowIndexKey)
-            {
-                int[] rowIndices = (int[])keysArray;
-                foreach (var colName in gdf.GroupColumnNames)
-                {
-                    var sourceCol = gdf.Source[colName];
-                    var keyCol = ColumnFactory.Create(colName, sourceCol.DataType, totalCount, isNullable: true); // Nullable for safety
-
-                    // Valid Groups
-                    for (int i = 0; i < rowIndices.Length; i++)
-                    {
-                        keyCol.AppendObject(sourceCol.GetValue(rowIndices[i]));
-                    }
-                    // Null Group
-                    if (gdf.NullGroupIndices != null) keyCol.AppendObject(null);
-
-                    resultCols.Add(keyCol);
-                }
-            }
-            else
-            {
-                // Single Column Strategy (Keys are values)
-                // Note: GetKeys returns Array, we assume element type matches column type
-                var colName = gdf.GroupColumnNames[0];
-                var keyType = keysArray.GetType().GetElementType()!;
-                var keyCol = ColumnFactory.Create(colName, keyType, totalCount, isNullable: true);
-
-                foreach (var key in keysArray) keyCol.AppendObject(key);
-                if (gdf.NullGroupIndices != null) keyCol.AppendObject(null);
-
-                resultCols.Add(keyCol);
-            }
-
-            // Add the calculated Value Column (Count, Sum, etc.)
-            resultCols.Add(valCol);
-
-            return new DataFrame(resultCols);
         }
     }
 }
