@@ -10,6 +10,7 @@ namespace LeichtFrame.Core.Engine.Memory
     public class NullBitmap : IDisposable
     {
         private ulong[] _buffer;
+        internal ulong[] RawBuffer => _buffer;
         private int _capacity;
 
         /// <summary>
