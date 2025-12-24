@@ -7,6 +7,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
         /// <summary>
         /// Packs multiple columns into a contiguous byte buffer (Row Layout).
         /// Format per Column: [NullFlag (1 Byte)] [Data (N Bytes)]
+        /// Uses Parallel.For to saturate memory bandwidth.
         /// </summary>
         /// <returns>Tuple of (BufferPtr, RowWidth)</returns>
         public static (IntPtr Buffer, int Width) Pack(DataFrame df, string[] cols)
@@ -16,6 +17,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
             var types = new Type[cols.Length];
             var columnData = new IColumn[cols.Length];
 
+            // 1. Calculate Schema Width & Metadata
             for (int i = 0; i < cols.Length; i++)
             {
                 var col = df[cols[i]];
@@ -31,26 +33,29 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
 
             byte* buffer = (byte*)NativeMemory.Alloc((nuint)(rowCount * width));
 
-            int offset = 0;
-
+            // 2. Parallel Pack per Column
+            int currentOffset = 0;
             for (int c = 0; c < cols.Length; c++)
             {
-                PackColumn(columnData[c], buffer, rowCount, width, offset);
+                var col = columnData[c];
+                int offset = currentOffset;
+                int stride = width;
+
+                PackColumnParallel(col, buffer, rowCount, stride, offset);
 
                 int size = GetSize(types[c]);
-                offset += size + 1;
+                currentOffset += size + 1;
             }
 
             return ((IntPtr)buffer, width);
         }
 
-        private static void PackColumn(IColumn col, byte* buffer, int rows, int stride, int offset)
+        private static void PackColumnParallel(IColumn col, byte* buffer, int rows, int stride, int offset)
         {
             // --- INT ---
             if (col is IntColumn ic)
             {
-                var span = ic.Values.Span;
-                for (int i = 0; i < rows; i++)
+                Parallel.For(0, rows, i =>
                 {
                     byte* ptr = buffer + (i * stride) + offset;
                     if (ic.IsNull(i))
@@ -61,15 +66,14 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
                     else
                     {
                         *ptr = 0;
-                        *(int*)(ptr + 1) = span[i];
+                        *(int*)(ptr + 1) = ic.Get(i);
                     }
-                }
+                });
             }
             // --- DOUBLE ---
             else if (col is DoubleColumn dc)
             {
-                var span = dc.Values.Span;
-                for (int i = 0; i < rows; i++)
+                Parallel.For(0, rows, i =>
                 {
                     byte* ptr = buffer + (i * stride) + offset;
                     if (dc.IsNull(i))
@@ -80,14 +84,14 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
                     else
                     {
                         *ptr = 0;
-                        *(double*)(ptr + 1) = span[i];
+                        *(double*)(ptr + 1) = dc.Get(i);
                     }
-                }
+                });
             }
             // --- BOOL ---
             else if (col is BoolColumn bc)
             {
-                for (int i = 0; i < rows; i++)
+                Parallel.For(0, rows, i =>
                 {
                     byte* ptr = buffer + (i * stride) + offset;
                     if (bc.IsNull(i))
@@ -100,13 +104,12 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
                         *ptr = 0;
                         *(byte*)(ptr + 1) = bc.Get(i) ? (byte)1 : (byte)0;
                     }
-                }
+                });
             }
             // --- DATE TIME ---
             else if (col is DateTimeColumn dtc)
             {
-                var span = dtc.Values.Span;
-                for (int i = 0; i < rows; i++)
+                Parallel.For(0, rows, i =>
                 {
                     byte* ptr = buffer + (i * stride) + offset;
                     if (dtc.IsNull(i))
@@ -117,14 +120,14 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
                     else
                     {
                         *ptr = 0;
-                        *(long*)(ptr + 1) = span[i].Ticks;
+                        *(long*)(ptr + 1) = dtc.Get(i).Ticks;
                     }
-                }
+                });
             }
-            // --- LONG (Generic Fallback) ---
+            // --- LONG (Generic Fallback / Future LongColumn) ---
             else if (col is IColumn<long> lc)
             {
-                for (int i = 0; i < rows; i++)
+                Parallel.For(0, rows, i =>
                 {
                     byte* ptr = buffer + (i * stride) + offset;
                     if (lc.IsNull(i))
@@ -137,7 +140,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Packing
                         *ptr = 0;
                         *(long*)(ptr + 1) = lc.GetValue(i);
                     }
-                }
+                });
             }
             else
             {

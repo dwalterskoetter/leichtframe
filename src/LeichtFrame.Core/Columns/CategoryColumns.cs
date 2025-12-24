@@ -95,7 +95,7 @@ namespace LeichtFrame.Core
             _codes.Dispose();
         }
 
-        internal static CategoryColumn CreateFromInternals(string name, int[] codes, List<string?> dictionary)
+        internal static CategoryColumn CreateFromInternals(string name, int[] codes, int length, List<string?> dictionary, bool isPooledCodes = false)
         {
             var lookup = new Dictionary<string, int>(dictionary.Count);
             for (int i = 1; i < dictionary.Count; i++)
@@ -103,7 +103,7 @@ namespace LeichtFrame.Core
                 if (dictionary[i] != null) lookup[dictionary[i]!] = i;
             }
 
-            var intCol = new IntColumn(name + "_codes", codes, codes.Length, deriveNullsFromZero: true);
+            var intCol = new IntColumn(name + "_codes", codes, length, deriveNullsFromZero: true, isPooled: isPooledCodes);
 
             return new CategoryColumn(name, intCol, dictionary, lookup);
         }
