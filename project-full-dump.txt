@@ -914,7 +914,6 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 using DuckDB.NET.Data;
 using LeichtFrame.Core;
-using LeichtFrame.Core.Expressions; // Wichtig für F.Col(), F.Count()
 
 namespace LeichtFrame.Benchmarks
 {
@@ -1002,7 +1001,7 @@ namespace LeichtFrame.Benchmarks
         }
 
         // =========================================================
-        // SCENARIO A: DENSE INT (Histogram)
+        // SCENARIO A: DENSE INT (Histogram vs DirectAddressing)
         // =========================================================
 
         [Benchmark(Description = "DuckDB: Dense Int (Stream)")]
@@ -1015,7 +1014,7 @@ namespace LeichtFrame.Benchmarks
             long checkSum = 0;
             while (reader.Read())
             {
-                // Access Data to measure Marshalling overhead
+                // Force data access to include marshalling costs
                 int key = reader.GetInt32(0);
                 long cnt = reader.GetInt64(1);
                 checkSum += key + cnt;
@@ -1026,15 +1025,16 @@ namespace LeichtFrame.Benchmarks
         [Benchmark(Description = "LF: Dense Int (Stream)")]
         public long LF_A_Stream()
         {
+            // Syntax: "*".Count()
             var stream = _lfFrame.Lazy()
                                  .GroupBy("Zip")
-                                 .Agg(F.Count().As("Cnt"))
+                                 .Agg("*".Count().As("Cnt"))
                                  .CollectStream();
 
             long checkSum = 0;
             foreach (var row in stream)
             {
-                // Access Data via RowView
+                // Access data via RowView struct
                 int key = row.Get<int>(0);
                 int cnt = row.Get<int>(1);
                 checkSum += key + cnt;
@@ -1042,7 +1042,7 @@ namespace LeichtFrame.Benchmarks
             return checkSum;
         }
 
-        [Benchmark(Description = "DuckDB: Dense Int (Materialized)")]
+        [Benchmark(Description = "DuckDB: Dense Int (Mat)")]
         public List<object[]> DuckDB_A_Mat()
         {
             using var cmd = _duckConnection.CreateCommand();
@@ -1052,23 +1052,23 @@ namespace LeichtFrame.Benchmarks
             var result = new List<object[]>();
             while (reader.Read())
             {
-                // Force Materialization into managed objects
+                // Force materialization into managed heap objects
                 result.Add(new object[] { reader.GetValue(0), reader.GetValue(1) });
             }
             return result;
         }
 
-        [Benchmark(Description = "LF: Dense Int (Materialized)")]
+        [Benchmark(Description = "LF: Dense Int (Mat)")]
         public DataFrame LF_A_Mat()
         {
             return _lfFrame.Lazy()
                            .GroupBy("Zip")
-                           .Agg(F.Count().As("Cnt"))
-                           .Collect(); // Builds DataFrame
+                           .Agg("*".Count().As("Cnt"))
+                           .Collect();
         }
 
         // =========================================================
-        // SCENARIO B: SPARSE INT (SwissMap / Hash)
+        // SCENARIO B: SPARSE INT (SwissMap vs Hash)
         // =========================================================
 
         [Benchmark(Description = "DuckDB: Sparse Int (Stream)")]
@@ -1093,7 +1093,7 @@ namespace LeichtFrame.Benchmarks
         {
             var stream = _lfFrame.Lazy()
                                  .GroupBy("Id")
-                                 .Agg(F.Count().As("Cnt"))
+                                 .Agg("*".Count().As("Cnt"))
                                  .CollectStream();
 
             long checkSum = 0;
@@ -1106,7 +1106,7 @@ namespace LeichtFrame.Benchmarks
             return checkSum;
         }
 
-        [Benchmark(Description = "DuckDB: Sparse Int (Materialized)")]
+        [Benchmark(Description = "DuckDB: Sparse Int (Mat)")]
         public List<object[]> DuckDB_B_Mat()
         {
             using var cmd = _duckConnection.CreateCommand();
@@ -1121,12 +1121,12 @@ namespace LeichtFrame.Benchmarks
             return result;
         }
 
-        [Benchmark(Description = "LF: Sparse Int (Materialized)")]
+        [Benchmark(Description = "LF: Sparse Int (Mat)")]
         public DataFrame LF_B_Mat()
         {
             return _lfFrame.Lazy()
                            .GroupBy("Id")
-                           .Agg(F.Count().As("Cnt"))
+                           .Agg("*".Count().As("Cnt"))
                            .Collect();
         }
 
@@ -1154,9 +1154,10 @@ namespace LeichtFrame.Benchmarks
         [Benchmark(Description = "LF: LowCard String (Stream)")]
         public double LF_C_Stream()
         {
+            // Syntax: "Val".Sum()
             var stream = _lfFrame.Lazy()
                                  .GroupBy("Category")
-                                 .Agg(F.Sum(F.Col("Val")).As("Total"))
+                                 .Agg("Val".Sum().As("Total"))
                                  .CollectStream();
 
             double checkSum = 0;
@@ -1169,7 +1170,7 @@ namespace LeichtFrame.Benchmarks
             return checkSum;
         }
 
-        [Benchmark(Description = "DuckDB: LowCard String (Materialized)")]
+        [Benchmark(Description = "DuckDB: LowCard String (Mat)")]
         public List<object[]> DuckDB_C_Mat()
         {
             using var cmd = _duckConnection.CreateCommand();
@@ -1184,12 +1185,12 @@ namespace LeichtFrame.Benchmarks
             return result;
         }
 
-        [Benchmark(Description = "LF: LowCard String (Materialized)")]
+        [Benchmark(Description = "LF: LowCard String (Mat)")]
         public DataFrame LF_C_Mat()
         {
             return _lfFrame.Lazy()
                            .GroupBy("Category")
-                           .Agg(F.Sum(F.Col("Val")).As("Total"))
+                           .Agg("Val".Sum().As("Total"))
                            .Collect();
         }
 
@@ -1219,7 +1220,7 @@ namespace LeichtFrame.Benchmarks
         {
             var stream = _lfFrame.Lazy()
                                  .GroupBy("UUID")
-                                 .Agg(F.Count().As("Cnt"))
+                                 .Agg("*".Count().As("Cnt"))
                                  .CollectStream();
 
             long checkSum = 0;
@@ -1232,7 +1233,7 @@ namespace LeichtFrame.Benchmarks
             return checkSum;
         }
 
-        [Benchmark(Description = "DuckDB: HighCard String (Materialized)")]
+        [Benchmark(Description = "DuckDB: HighCard String (Mat)")]
         public List<object[]> DuckDB_D_Mat()
         {
             using var cmd = _duckConnection.CreateCommand();
@@ -1247,12 +1248,12 @@ namespace LeichtFrame.Benchmarks
             return result;
         }
 
-        [Benchmark(Description = "LF: HighCard String (Materialized)")]
+        [Benchmark(Description = "LF: HighCard String (Mat)")]
         public DataFrame LF_D_Mat()
         {
             return _lfFrame.Lazy()
                            .GroupBy("UUID")
-                           .Agg(F.Count().As("Cnt"))
+                           .Agg("*".Count().As("Cnt"))
                            .Collect();
         }
 
@@ -1283,7 +1284,7 @@ namespace LeichtFrame.Benchmarks
         {
             var stream = _lfFrame.Lazy()
                                  .GroupBy("Zip", "Id")
-                                 .Agg(F.Count().As("Cnt"))
+                                 .Agg("*".Count().As("Cnt"))
                                  .CollectStream();
 
             long checkSum = 0;
@@ -1297,7 +1298,7 @@ namespace LeichtFrame.Benchmarks
             return checkSum;
         }
 
-        [Benchmark(Description = "DuckDB: Multi-Col (Materialized)")]
+        [Benchmark(Description = "DuckDB: Multi-Col (Mat)")]
         public List<object[]> DuckDB_E_Mat()
         {
             using var cmd = _duckConnection.CreateCommand();
@@ -1312,12 +1313,12 @@ namespace LeichtFrame.Benchmarks
             return result;
         }
 
-        [Benchmark(Description = "LF: Multi-Col (Materialized)")]
+        [Benchmark(Description = "LF: Multi-Col (Mat)")]
         public DataFrame LF_E_Mat()
         {
             return _lfFrame.Lazy()
                            .GroupBy("Zip", "Id")
-                           .Agg(F.Count().As("Cnt"))
+                           .Agg("*".Count().As("Cnt"))
                            .Collect();
         }
     }
@@ -1652,6 +1653,141 @@ namespace LeichtFrame.Benchmarks
                            .GroupBy("Id")
                            .Agg(Count().As("Count"))
                            .Collect();
+        }
+    }
+}
+===== FILE: src/LeichtFrame.Benchmarks/Core/LowCardBreakdownBenchmarks.cs =====
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Order;
+using DuckDB.NET.Data;
+using LeichtFrame.Core;
+using LeichtFrame.Core.Engine.Algorithms.Converter; // Zugriff auf Internals nötig
+using LeichtFrame.Core.Expressions;
+
+namespace LeichtFrame.Benchmarks.Breakdown
+{
+    [MemoryDiagnoser]
+    [Orderer(SummaryOrderPolicy.FastestToSlowest)]
+    public class LowCardBreakdownBenchmarks
+    {
+        [Params(1_000_000)]
+        public int N;
+
+        private DataFrame _stringDf = null!;
+        private DataFrame _categoryDf = null!;
+        private DuckDBConnection _duckConnection = null!;
+
+        [GlobalSetup]
+        public void Setup()
+        {
+            // 1. Daten generieren (5 Kategorien)
+            var cats = new[] { "Electronics", "Books", "Garden", "Auto", "Food" };
+            var rnd = new Random(42);
+
+            var colCat = new StringColumn("Category", N);
+            var colVal = new DoubleColumn("Val", N);
+
+            // Für DuckDB
+            _duckConnection = new DuckDBConnection("DataSource=:memory:");
+            _duckConnection.Open();
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE BenchData (Category VARCHAR, Val DOUBLE)";
+            cmd.ExecuteNonQuery();
+
+            using var appender = _duckConnection.CreateAppender("BenchData");
+
+            for (int i = 0; i < N; i++)
+            {
+                string c = cats[rnd.Next(cats.Length)];
+                double v = rnd.NextDouble();
+
+                colCat.Append(c);
+                colVal.Append(v);
+
+                appender.CreateRow().AppendValue(c).AppendValue(v).EndRow();
+            }
+
+            // 2. Normaler DataFrame (String)
+            _stringDf = new DataFrame(new IColumn[] { colCat, colVal });
+
+            // 3. Pre-Converted DataFrame (Category)
+            // Wir simulieren hier den Zustand NACH der internen Optimierung
+            // oder wenn der User das Schema beim Laden schon definiert hätte.
+            var catCol = StringConverter.ToCategory(colCat); // Manueller Aufruf des internen Converters
+            var valColClone = (DoubleColumn)colVal.CloneSubset(Enumerable.Range(0, N).ToArray()); // Clone für Fairness
+
+            _categoryDf = new DataFrame(new IColumn[] { catCol, valColClone });
+        }
+
+        [GlobalCleanup]
+        public void Cleanup()
+        {
+            _stringDf?.Dispose();
+            _categoryDf?.Dispose();
+            _duckConnection?.Dispose();
+        }
+
+        // =========================================================
+        // 1. BASELINE: DUCKDB
+        // =========================================================
+
+        [Benchmark(Description = "1. DuckDB (Total)")]
+        public double DuckDB_Total()
+        {
+            using var cmd = _duckConnection.CreateCommand();
+            cmd.CommandText = "SELECT Category, SUM(Val) FROM BenchData GROUP BY Category";
+            // Wir nutzen ExecuteScalar um Overhead zu minimieren und Engine zu messen
+            // (Simuliert "Stream" Ansatz grob)
+            using var reader = cmd.ExecuteReader();
+            double sum = 0;
+            while (reader.Read()) sum += reader.GetDouble(1);
+            return sum;
+        }
+
+        // =========================================================
+        // 2. LEICHTFRAME: FULL AUTO (User Experience)
+        // =========================================================
+
+        [Benchmark(Description = "2. LF Auto (Total)")]
+        public DataFrame LF_Auto_Total()
+        {
+            // Das ist der aktuelle langsame Pfad:
+            // 1. Check LowCard
+            // 2. Convert to Category (Hashing)
+            // 3. GroupBy Ints
+            return _stringDf.Lazy()
+                            .GroupBy("Category")
+                            .Agg("Val".Sum())
+                            .Collect();
+        }
+
+        // =========================================================
+        // 3. LEICHTFRAME: NUR KONVERTIERUNG (The Bottleneck)
+        // =========================================================
+
+        [Benchmark(Description = "3. LF Step: Conversion")]
+        public void LF_Step_Conversion()
+        {
+            var strCol = (StringColumn)_stringDf["Category"];
+            // Wir messen NUR wie lange es dauert, aus Strings Ints zu machen.
+            // Das ist der Teil, den wir optimiert haben (Unsafe Converter).
+            using var catCol = StringConverter.ToCategory(strCol);
+        }
+
+        // =========================================================
+        // 4. LEICHTFRAME: NUR GROUPING (The Engine Speed)
+        // =========================================================
+
+        [Benchmark(Description = "4. LF Step: Grouping (Pre-Converted)")]
+        public DataFrame LF_Step_Grouping()
+        {
+            // Hier arbeiten wir auf dem _categoryDf.
+            // Die Spalte ist bereits 'CategoryColumn'.
+            // Die Engine springt SOFORT in den 'DirectAddressingStrategy' (Histogramm).
+            return _categoryDf.Lazy()
+                              .GroupBy("Category")
+                              .Agg("Val".Sum())
+                              .Collect();
         }
     }
 }
@@ -2761,6 +2897,118 @@ namespace LeichtFrame.Core
             }
             _nulls?.Dispose();
             _nulls = null;
+        }
+    }
+}
+===== FILE: src/LeichtFrame.Core/Columns/CategoryColumns.cs =====
+namespace LeichtFrame.Core
+{
+    /// <summary>
+    /// A high-performance column optimized for low-cardinality string data (Categorical).
+    /// Stores data internally as integer codes referencing a shared dictionary.
+    /// </summary>
+    public class CategoryColumn : Column<string?>, IDisposable
+    {
+        private readonly IntColumn _codes;
+
+        private readonly List<string?> _dictionary;
+        internal List<string?> InternalDictionary => _dictionary;
+        private readonly Dictionary<string, int> _lookup;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CategoryColumn"/> class.
+        /// </summary>
+        public CategoryColumn(string name, int capacity = 16) : base(name, true)
+        {
+            _codes = new IntColumn(name + "_codes", capacity, isNullable: true);
+            _dictionary = new List<string?> { null };
+            _lookup = new Dictionary<string, int>();
+        }
+
+        private CategoryColumn(string name, IntColumn codes, List<string?> dictionary, Dictionary<string, int> lookup)
+            : base(name, true)
+        {
+            _codes = codes;
+            _dictionary = dictionary;
+            _lookup = lookup;
+        }
+
+        /// <summary>Gets the internal integer codes column.</summary>
+        internal IntColumn Codes => _codes;
+
+        /// <summary>Gets the dictionary array mapping codes to strings.</summary>
+        internal string?[] DictionaryArray => _dictionary.ToArray();
+
+        /// <summary>Gets the number of unique categories.</summary>
+        internal int Cardinality => _dictionary.Count;
+
+        /// <inheritdoc />
+        public override int Length => _codes.Length;
+
+        /// <inheritdoc />
+        public override ReadOnlyMemory<string?> Values => throw new NotSupportedException("Use Get() or Codes.");
+
+        /// <inheritdoc />
+        public override string? Get(int index)
+        {
+            if (_codes.IsNull(index)) return null;
+            return _dictionary[_codes.Get(index)];
+        }
+
+        /// <inheritdoc />
+        public override void SetValue(int index, string? value) => throw new NotSupportedException("Append-only.");
+
+        /// <inheritdoc />
+        public override void Append(string? value)
+        {
+            if (value == null)
+            {
+                _codes.Append(null);
+                return;
+            }
+
+            if (!_lookup.TryGetValue(value, out int code))
+            {
+                code = _dictionary.Count;
+                _dictionary.Add(value);
+                _lookup[value] = code;
+            }
+            _codes.Append(code);
+        }
+
+        /// <inheritdoc />
+        public override bool IsNull(int index) => _codes.IsNull(index);
+        /// <inheritdoc />
+        public override void SetNull(int index) => _codes.SetNull(index);
+        /// <inheritdoc />
+        public override void SetNotNull(int index) => _codes.SetNotNull(index);
+        /// <inheritdoc />
+        public override void EnsureCapacity(int minCapacity) => _codes.EnsureCapacity(minCapacity);
+
+        /// <inheritdoc />
+        public override IColumn CloneSubset(IReadOnlyList<int> indices)
+        {
+            var newCodes = (IntColumn)_codes.CloneSubset(indices);
+            return new CategoryColumn(Name, newCodes, _dictionary, _lookup);
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            _codes.Dispose();
+        }
+
+        internal static CategoryColumn CreateFromInternals(string name, int[] codes, int length, List<string?> dictionary, bool isPooledCodes = false)
+        {
+            var lookup = new Dictionary<string, int>(dictionary.Count);
+            for (int i = 1; i < dictionary.Count; i++)
+            {
+                if (dictionary[i] != null) lookup[dictionary[i]!] = i;
+            }
+
+            var intCol = new IntColumn(name + "_codes", codes, length, deriveNullsFromZero: true, isPooled: isPooledCodes);
+
+            return new CategoryColumn(name, intCol, dictionary, lookup);
         }
     }
 }
@@ -4111,6 +4359,7 @@ namespace LeichtFrame.Core
         private int[] _data;
         private NullBitmap? _nulls;
         private int _length;
+        private bool _isPooledMemory;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="IntColumn"/> class.
@@ -4123,6 +4372,7 @@ namespace LeichtFrame.Core
         {
             _length = 0;
             _data = ArrayPool<int>.Shared.Rent(capacity);
+            _isPooledMemory = true;
 
             if (isNullable)
             {
@@ -4231,28 +4481,23 @@ namespace LeichtFrame.Core
             {
                 var vectors = MemoryMarshal.Cast<int, Vector<int>>(span);
 
-                // We utilize Vector<long> to accumulate sums to prevent 32-bit overflow.
                 var accVectorLow = Vector<long>.Zero;
                 var accVectorHigh = Vector<long>.Zero;
 
                 foreach (var v in vectors)
                 {
-                    // Widen: Split Vector<int> into two Vector<long>
                     Vector.Widen(v, out var low, out var high);
                     accVectorLow += low;
                     accVectorHigh += high;
                 }
 
-                // Sum up the lanes of the long accumulators
                 sum += Vector.Sum(accVectorLow);
                 sum += Vector.Sum(accVectorHigh);
 
-                // Handle remaining elements (Tail)
                 int processed = vectors.Length * Vector<int>.Count;
                 span = span.Slice(processed);
             }
 
-            // Scalar fallback / Tail loop
             foreach (var val in span)
             {
                 sum += val;
@@ -4268,8 +4513,6 @@ namespace LeichtFrame.Core
         {
             if (_length == 0) return 0;
 
-            // SIMD is only safe for non-nullable columns because '0' (null representation) 
-            // would falsify the Min calculation.
             if (IsNullable)
             {
                 return MinNullable();
@@ -4288,7 +4531,6 @@ namespace LeichtFrame.Core
                     minVector = Vector.Min(minVector, v);
                 }
 
-                // Reduce vector lanes
                 for (int i = 0; i < Vector<int>.Count; i++)
                 {
                     if (minVector[i] < min) min = minVector[i];
@@ -4348,7 +4590,6 @@ namespace LeichtFrame.Core
             return max;
         }
 
-        // Fallback helpers for Nullable types (Scalar loop with null checks)
         private int MinNullable()
         {
             int min = int.MaxValue;
@@ -4392,8 +4633,14 @@ namespace LeichtFrame.Core
 
             var newBuffer = ArrayPool<int>.Shared.Rent(newCapacity);
             Array.Copy(_data, newBuffer, _length);
-            ArrayPool<int>.Shared.Return(_data);
+
+            if (_isPooledMemory)
+            {
+                ArrayPool<int>.Shared.Return(_data);
+            }
+
             _data = newBuffer;
+            _isPooledMemory = true;
 
             _nulls?.Resize(newCapacity);
         }
@@ -4429,7 +4676,10 @@ namespace LeichtFrame.Core
         {
             if (_data != null)
             {
-                ArrayPool<int>.Shared.Return(_data);
+                if (_isPooledMemory)
+                {
+                    ArrayPool<int>.Shared.Return(_data);
+                }
                 _data = null!;
             }
 
@@ -4520,11 +4770,10 @@ namespace LeichtFrame.Core
         public override object? ComputeSum(int[] indices, int start, int end)
         {
             long sum = 0;
-            var data = _data; // Local ref for performance optimization
+            var data = _data;
 
             if (!IsNullable)
             {
-                // Non-nullable path: tight loop
                 for (int i = start; i < end; i++)
                 {
                     sum += data[indices[i]];
@@ -4532,7 +4781,6 @@ namespace LeichtFrame.Core
             }
             else
             {
-                // Nullable path: check null bitmap
                 var nulls = _nulls!;
                 for (int i = start; i < end; i++)
                 {
@@ -4655,13 +4903,28 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Internal Move-Constructor.
+        /// Adopts the provided array.
         /// </summary>
-        internal IntColumn(string name, int[] adoptedData, int length)
-            : base(name, isNullable: false)
+        internal IntColumn(string name, int[] adoptedData, int length, bool deriveNullsFromZero = false, bool isPooled = false)
+            : base(name, isNullable: deriveNullsFromZero)
         {
             _data = adoptedData;
             _length = length;
-            _nulls = null;
+            _isPooledMemory = isPooled;
+
+            if (deriveNullsFromZero)
+            {
+                _nulls = new NullBitmap(length);
+                for (int i = 0; i < length; i++)
+                {
+                    if (_data[i] == 0) _nulls.SetNull(i);
+                    else _nulls.SetNotNull(i);
+                }
+            }
+            else
+            {
+                _nulls = null;
+            }
         }
     }
 }
@@ -4902,6 +5165,7 @@ namespace LeichtFrame.Core
 
         // 3. Nulls: Bitmap for null values.
         private NullBitmap? _nulls;
+        internal NullBitmap? InternalNulls => _nulls;
 
         private int _length;          // Number of rows
         private int _totalByteCount;  // Currently used bytes in _values
@@ -5834,6 +6098,89 @@ public class DataFrameSchema
         return new DataFrameSchema(colDefs);
     }
 }
+===== FILE: src/LeichtFrame.Core/DataFrame/DictionaryGroupedDataFrame.cs =====
+using System.Runtime.InteropServices;
+using LeichtFrame.Core.Engine;
+
+namespace LeichtFrame.Core
+{
+    internal class DictionaryGroupedDataFrame : GroupedDataFrame
+    {
+        private readonly string?[] _dictionary;
+        private readonly bool _hasNullCodeZero;
+        private string[]? _resolvedKeys;
+        private int[]? _nullIndices;
+        private int[]? _offsets;
+        private int[]? _indices;
+        private int _realGroupCount;
+
+        public DictionaryGroupedDataFrame(
+            DataFrame df,
+            string[] colNames,
+            NativeGroupedData nativeData,
+            string?[] dictionary,
+            bool hasNullCodeZero)
+            : base(df, colNames, nativeData)
+        {
+            _dictionary = dictionary;
+            _hasNullCodeZero = hasNullCodeZero;
+
+            EnsureParsed();
+            nativeData.Dispose();
+            NativeData = null;
+        }
+
+        private unsafe void EnsureParsed()
+        {
+            if (_resolvedKeys != null) return;
+
+            int rawCount = NativeData!.GroupCount;
+            int[] rawKeys = new int[rawCount];
+            int[] rawOffsets = new int[rawCount + 1];
+
+            Marshal.Copy((nint)NativeData.Keys.Ptr, rawKeys, 0, rawCount);
+            Marshal.Copy((nint)NativeData.Offsets.Ptr, rawOffsets, 0, rawCount + 1);
+
+            bool nullGroupFound = _hasNullCodeZero && rawCount > 0 && rawKeys[0] == 0;
+            int startGroupIdx = nullGroupFound ? 1 : 0;
+            _realGroupCount = rawCount - startGroupIdx;
+
+            if (nullGroupFound)
+            {
+                int start = rawOffsets[0];
+                int end = rawOffsets[1];
+                int len = end - start;
+                _nullIndices = new int[len];
+                Marshal.Copy((nint)NativeData.Indices.Ptr + (start * 4), _nullIndices, 0, len);
+            }
+
+            _resolvedKeys = new string[_realGroupCount];
+            for (int i = 0; i < _realGroupCount; i++)
+            {
+                int code = rawKeys[i + startGroupIdx];
+                _resolvedKeys[i] = _dictionary[code]!;
+            }
+
+            _offsets = new int[_realGroupCount + 1];
+            int shift = nullGroupFound ? rawOffsets[1] : 0;
+
+            for (int i = 0; i <= _realGroupCount; i++)
+            {
+                _offsets[i] = rawOffsets[i + startGroupIdx] - shift;
+            }
+
+            int totalIndices = rawOffsets[rawCount] - shift;
+            _indices = new int[totalIndices];
+            Marshal.Copy((nint)NativeData.Indices.Ptr + (shift * 4), _indices, 0, totalIndices);
+        }
+
+        public override int GroupCount { get { EnsureParsed(); return _realGroupCount; } }
+        public override Array GetKeys() { EnsureParsed(); return _resolvedKeys!; }
+        public override int[] GroupOffsets { get { EnsureParsed(); return _offsets!; } }
+        public override int[] RowIndices { get { EnsureParsed(); return _indices!; } }
+        public override int[]? NullGroupIndices { get { EnsureParsed(); return _nullIndices; } }
+    }
+}
 ===== FILE: src/LeichtFrame.Core/DataFrame/Enumerators/NativeGroupCountEnumerator.cs =====
 using System.Runtime.CompilerServices;
 using LeichtFrame.Core.Engine;
@@ -6454,6 +6801,421 @@ namespace LeichtFrame.Core
         {
             int index = _schema.GetColumnIndex(columnName);
             return IsNull(index);
+        }
+    }
+}
+===== FILE: src/LeichtFrame.Core/Engine/Algorithms/Converter/ParallelStringConverter.cs =====
+using System.Buffers;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace LeichtFrame.Core.Engine.Algorithms.Converter
+{
+    internal static unsafe class ParallelStringConverter
+    {
+        private const int MinRowsForParallel = 100_000;
+
+        public static CategoryColumn Convert(StringColumn col)
+        {
+            if (col.Length < MinRowsForParallel)
+            {
+                return ConvertSingleThreaded(col);
+            }
+
+            int rowCount = col.Length;
+            int parallelism = Environment.ProcessorCount;
+
+            int[] finalCodes = ArrayPool<int>.Shared.Rent(rowCount);
+
+            var partitions = Partitioner.Create(0, rowCount, rowCount / parallelism);
+            var localResults = new LocalResult[parallelism];
+
+            fixed (byte* pGlobalBytes = col.RawBytes)
+            fixed (int* pGlobalOffsets = col.Offsets)
+            fixed (int* pFinalCodes = finalCodes)
+            fixed (ulong* pNullBitmap = col.InternalNulls?.RawBuffer)
+            {
+                IntPtr ptrBytes = (IntPtr)pGlobalBytes;
+                IntPtr ptrOffsets = (IntPtr)pGlobalOffsets;
+                IntPtr ptrCodes = (IntPtr)pFinalCodes;
+                IntPtr ptrNulls = (IntPtr)pNullBitmap;
+
+                Parallel.ForEach(partitions, (range, state, idx) =>
+                {
+                    localResults[idx] = ProcessChunk(
+                        range.Item1,
+                        range.Item2,
+                        (byte*)ptrBytes,
+                        (int*)ptrOffsets,
+                        (int*)ptrCodes,
+                        (ulong*)ptrNulls
+                    );
+                });
+            }
+
+            return MergeAndCreate(col.Name, rowCount, finalCodes, localResults);
+        }
+
+        private static CategoryColumn ConvertSingleThreaded(StringColumn col)
+        {
+            int[] finalCodes = ArrayPool<int>.Shared.Rent(col.Length);
+            var result = new LocalResult[1];
+
+            fixed (byte* pBytes = col.RawBytes)
+            fixed (int* pOffsets = col.Offsets)
+            fixed (int* pCodes = finalCodes)
+            fixed (ulong* pNulls = col.InternalNulls?.RawBuffer)
+            {
+                result[0] = ProcessChunk(0, col.Length, pBytes, pOffsets, pCodes, pNulls);
+            }
+
+            return MergeAndCreate(col.Name, col.Length, finalCodes, result);
+        }
+
+        private static CategoryColumn MergeAndCreate(string name, int rowCount, int[] finalCodes, LocalResult[] results)
+        {
+            var globalDict = new List<string?> { null };
+            var globalLookup = new Dictionary<string, int>();
+
+            int[][] remapTables = new int[results.Length][];
+
+            for (int t = 0; t < results.Length; t++)
+            {
+                var localList = results[t].LocalDict;
+                if (localList == null) { remapTables[t] = Array.Empty<int>(); continue; }
+
+                var map = new int[localList.Count];
+                map[0] = 0;
+
+                for (int c = 1; c < localList.Count; c++)
+                {
+                    string s = localList[c];
+                    if (!globalLookup.TryGetValue(s, out int gCode))
+                    {
+                        gCode = globalDict.Count;
+                        globalDict.Add(s);
+                        globalLookup[s] = gCode;
+                    }
+                    map[c] = gCode;
+                }
+                remapTables[t] = map;
+            }
+
+            int parallelism = results.Length;
+
+            if (parallelism == 1)
+            {
+                int[] map = remapTables[0];
+                if (map.Length > 0)
+                {
+                    for (int i = 0; i < rowCount; i++) finalCodes[i] = map[finalCodes[i]];
+                }
+            }
+            else
+            {
+                int chunkSize = rowCount / parallelism;
+                fixed (int* pCodes = finalCodes)
+                {
+                    IntPtr ptrCodes = (IntPtr)pCodes;
+                    Parallel.For(0, parallelism, t =>
+                    {
+                        int start = t * chunkSize;
+                        int end = (t == parallelism - 1) ? rowCount : start + chunkSize;
+                        int[] map = remapTables[t];
+                        if (map.Length == 0) return;
+                        int* ptr = (int*)ptrCodes + start;
+                        int* ptrEnd = (int*)ptrCodes + end;
+                        while (ptr < ptrEnd) { *ptr = map[*ptr]; ptr++; }
+                    });
+                }
+            }
+            return CategoryColumn.CreateFromInternals(name, finalCodes, rowCount, globalDict, isPooledCodes: true);
+        }
+
+        private struct LocalResult { public List<string> LocalDict; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static LocalResult ProcessChunk(int start, int end, byte* pBytes, int* pOffsets, int* pOutCodes, ulong* pNulls)
+        {
+            var dictList = new List<string> { null! };
+
+            var map = new NativeLocalMap();
+            map.Init(1024, pBytes);
+
+            int* ptrOut = pOutCodes + start;
+
+            try
+            {
+                if (pNulls != null)
+                {
+                    for (int i = 0; i < (end - start); i++)
+                    {
+                        int absIndex = start + i;
+
+                        if ((pNulls[absIndex >> 6] & (1UL << (absIndex & 63))) != 0)
+                        {
+                            *ptrOut = 0;
+                            ptrOut++;
+                            continue;
+                        }
+
+                        int strStart = pOffsets[absIndex];
+                        int len = pOffsets[absIndex + 1] - strStart;
+
+                        byte* pStr = pBytes + strStart;
+                        int hash = HashFast(pStr, len);
+
+                        int code = map.GetOrAdd(strStart, len, hash, dictList);
+                        *ptrOut = code;
+                        ptrOut++;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < (end - start); i++)
+                    {
+                        int absIndex = start + i;
+                        int strStart = pOffsets[absIndex];
+                        int len = pOffsets[absIndex + 1] - strStart;
+
+                        byte* pStr = pBytes + strStart;
+                        int hash = HashFast(pStr, len);
+
+                        int code = map.GetOrAdd(strStart, len, hash, dictList);
+                        *ptrOut = code;
+                        ptrOut++;
+                    }
+                }
+            }
+            finally
+            {
+                map.Dispose();
+            }
+
+            return new LocalResult { LocalDict = dictList };
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int HashFast(byte* ptr, int len)
+        {
+            int hash = unchecked((int)2166136261);
+            while (len >= 4) { hash = (hash ^ Unsafe.ReadUnaligned<int>(ptr)) * 16777619; ptr += 4; len -= 4; }
+            for (int i = 0; i < len; i++) hash = (hash ^ ptr[i]) * 16777619;
+            return hash;
+        }
+    }
+
+    internal unsafe struct NativeLocalMap : IDisposable
+    {
+        public int* Buckets;
+        public int* KeyOffsets;
+        public int* KeyLengths;
+
+        private int _capacity;
+        private int _mask;
+        private int _resizeThreshold;
+        private int _count;
+        private byte* _globalBytes;
+
+        public void Init(int initialCapacity, byte* globalBytes)
+        {
+            _capacity = initialCapacity < 16 ? 16 : (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)initialCapacity);
+            _mask = _capacity - 1;
+            _resizeThreshold = (int)(_capacity * 0.75f);
+            _count = 1;
+            _globalBytes = globalBytes;
+
+            nuint bucketBytes = (nuint)(_capacity * sizeof(int));
+            nuint metaBytes = (nuint)(_capacity * sizeof(int));
+
+            Buckets = (int*)NativeMemory.Alloc(bucketBytes);
+            new Span<int>(Buckets, _capacity).Fill(-1);
+
+            KeyOffsets = (int*)NativeMemory.Alloc(metaBytes);
+            KeyLengths = (int*)NativeMemory.Alloc(metaBytes);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetOrAdd(int offset, int len, int hash, List<string> stringAccumulator)
+        {
+            if (_count >= _resizeThreshold) Resize();
+
+            int idx = hash & _mask;
+            int* buckets = Buckets;
+
+            while (true)
+            {
+                int code = buckets[idx];
+
+                if (code == -1)
+                {
+                    code = _count;
+
+                    KeyOffsets[code] = offset;
+                    KeyLengths[code] = len;
+                    buckets[idx] = code;
+
+                    stringAccumulator.Add(Encoding.UTF8.GetString(_globalBytes + offset, len));
+
+                    _count++;
+                    return code;
+                }
+                else
+                {
+                    if (KeyLengths[code] == len)
+                    {
+                        byte* pInput = _globalBytes + offset;
+                        byte* pCand = _globalBytes + KeyOffsets[code];
+                        if (new ReadOnlySpan<byte>(pInput, len).SequenceEqual(new ReadOnlySpan<byte>(pCand, len))) return code;
+                    }
+                }
+                idx = (idx + 1) & _mask;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void Resize()
+        {
+            int oldCap = _capacity;
+            int newCap = oldCap * 2;
+            int newMask = newCap - 1;
+
+            KeyOffsets = (int*)NativeMemory.Realloc(KeyOffsets, (nuint)(newCap * sizeof(int)));
+            KeyLengths = (int*)NativeMemory.Realloc(KeyLengths, (nuint)(newCap * sizeof(int)));
+
+            int* oldBuckets = Buckets;
+            int* newBuckets = (int*)NativeMemory.Alloc((nuint)(newCap * sizeof(int)));
+            new Span<int>(newBuckets, newCap).Fill(-1);
+
+            for (int idx = 0; idx < oldCap; idx++)
+            {
+                int code = oldBuckets[idx];
+                if (code != -1)
+                {
+                    int off = KeyOffsets[code];
+                    int len = KeyLengths[code];
+
+                    int h = unchecked((int)2166136261);
+                    byte* ptr = _globalBytes + off;
+                    int l = len;
+                    while (l >= 4) { h = (h ^ Unsafe.ReadUnaligned<int>(ptr)) * 16777619; ptr += 4; l -= 4; }
+                    for (int k = 0; k < l; k++) h = (h ^ ptr[k]) * 16777619;
+
+                    int newSlot = h & newMask;
+                    while (newBuckets[newSlot] != -1) newSlot = (newSlot + 1) & newMask;
+                    newBuckets[newSlot] = code;
+                }
+            }
+
+            NativeMemory.Free(oldBuckets);
+            Buckets = newBuckets;
+            _capacity = newCap;
+            _mask = newMask;
+            _resizeThreshold = (int)(newCap * 0.75f);
+        }
+
+        public void Dispose()
+        {
+            if (Buckets != null) NativeMemory.Free(Buckets);
+            if (KeyOffsets != null) NativeMemory.Free(KeyOffsets);
+            if (KeyLengths != null) NativeMemory.Free(KeyLengths);
+        }
+    }
+}
+===== FILE: src/LeichtFrame.Core/Engine/Algorithms/Converter/StringConverter.cs =====
+using System.Text;
+
+namespace LeichtFrame.Core.Engine.Algorithms.Converter
+{
+    internal static unsafe class StringConverter
+    {
+        /// <summary>
+        /// Converts a StringColumn to a CategoryColumn avoiding string allocations for existing values.
+        /// Optimized for Low Cardinality.
+        /// </summary>
+        public static CategoryColumn ToCategory(StringColumn col)
+        {
+            int rowCount = col.Length;
+            int[] codes = new int[rowCount];
+            var dictionary = new List<string?> { null };
+
+            int mapSize = 1024;
+            int mask = mapSize - 1;
+            int* buckets = stackalloc int[mapSize];
+            new Span<int>(buckets, mapSize).Fill(-1);
+
+            int* codeToRowIdx = stackalloc int[mapSize];
+
+            fixed (byte* pBytes = col.RawBytes)
+            fixed (int* pOffsets = col.Offsets)
+            {
+                for (int i = 0; i < rowCount; i++)
+                {
+                    if (col.IsNull(i))
+                    {
+                        codes[i] = 0;
+                        continue;
+                    }
+
+                    int start = pOffsets[i];
+                    int len = pOffsets[i + 1] - start;
+                    byte* pStr = pBytes + start;
+
+                    int hash = -2128831035;
+                    for (int k = 0; k < len; k++) hash = (hash ^ pStr[k]) * 16777619;
+
+                    int idx = hash & mask;
+                    int foundCode = -1;
+
+                    while (true)
+                    {
+                        int bucketCode = buckets[idx];
+
+                        if (bucketCode == -1)
+                        {
+                            foundCode = dictionary.Count;
+                            dictionary.Add(Encoding.UTF8.GetString(pStr, len));
+
+                            buckets[idx] = foundCode;
+                            codeToRowIdx[foundCode] = i;
+                            break;
+                        }
+                        else
+                        {
+                            string existing = dictionary[bucketCode]!;
+                            if (BytesEqualString(pStr, len, existing))
+                            {
+                                foundCode = bucketCode;
+                                break;
+                            }
+                        }
+
+                        idx = (idx + 1) & mask;
+                    }
+
+                    codes[i] = foundCode;
+                }
+            }
+            return CategoryColumn.CreateFromInternals(col.Name, codes, dictionary);
+        }
+
+        private static bool BytesEqualString(byte* pBytes, int len, string str)
+        {
+            if (str.Length != len && Encoding.UTF8.GetByteCount(str) != len) return false;
+
+            var strSpan = str.AsSpan();
+
+            byte* temp = stackalloc byte[len];
+            int written = Encoding.UTF8.GetBytes(strSpan, new Span<byte>(temp, len));
+            if (written != len) return false;
+
+            for (int i = 0; i < len; i++)
+            {
+                if (pBytes[i] != temp[i]) return false;
+            }
+            return true;
         }
     }
 }
@@ -8184,6 +8946,7 @@ namespace LeichtFrame.Core.Engine
 
 ===== FILE: src/LeichtFrame.Core/Engine/Kernels/GroupBy/GroupByDispatcher.cs =====
 using LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies;
+using LeichtFrame.Core.Engine.Algorithms.Converter;
 
 namespace LeichtFrame.Core.Engine.Kernels.GroupBy
 {
@@ -8196,7 +8959,22 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy
 
             if (rowCount == 0) return new GenericHashMapStrategy().Group(df, columnName);
 
-            // --- INT ---
+            if (col is CategoryColumn catCol)
+            {
+                // Super-Fast Path: Direct Addressing on integer codes.
+                var strategy = new DirectAddressingStrategy(min: 0, max: catCol.Cardinality);
+                var nativeData = strategy.ComputeNative(catCol.Codes, df.RowCount);
+
+                return new DictionaryGroupedDataFrame(
+                    df,
+                    new[] { columnName },
+                    nativeData,
+                    catCol.DictionaryArray,
+                    hasNullCodeZero: true
+                );
+            }
+
+            // --- 2. INT ---
             if (col is IntColumn intCol)
             {
                 int min = intCol.Min();
@@ -8212,19 +8990,31 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy
                 return new IntSwissMapStrategy().Group(df, columnName);
             }
 
-            // --- STRING ---
+            // --- 3. STRING ---
             if (col is StringColumn strCol)
             {
-                // Low Cardinality -> String Dictionary
+                // Low Cardinality -> Auto-Convert to Category -> String Dictionary
                 if (IsLikelyLowCardinality(strCol, rowCount))
                 {
-                    return new StringDictionaryStrategy().Group(df, columnName);
+                    using var autoCatCol = ConvertStringColumnToCategory(strCol);
+
+                    var strategy = new DirectAddressingStrategy(min: 0, max: autoCatCol.Cardinality);
+                    var nativeData = strategy.ComputeNative(autoCatCol.Codes, rowCount);
+
+                    return new DictionaryGroupedDataFrame(
+                        df,
+                        new[] { columnName },
+                        nativeData,
+                        autoCatCol.DictionaryArray,
+                        hasNullCodeZero: true
+                    );
                 }
 
                 // High Cardinality -> String Swiss Map
                 return new StringSwissMapStrategy().Group(df, columnName);
             }
 
+            // --- 4. FALLBACK (Generic) ---
             return new GenericHashMapStrategy().Group(df, columnName);
         }
 
@@ -8254,20 +9044,31 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy
         // Helper: Detect Low Cardinality via Sampling
         private static bool IsLikelyLowCardinality(StringColumn col, int rowCount)
         {
-            if (rowCount < 1024) return false;
+            if (rowCount == 0) return false;
 
-            int sampleSize = 64;
+            int sampleSize = 128;
             var set = new HashSet<string>();
-
             int step = rowCount / sampleSize;
+            if (step == 0) step = 1;
+
             for (int i = 0; i < rowCount; i += step)
             {
+                if (set.Count >= sampleSize) break;
+
                 string? val = col.Get(i);
                 if (val != null) set.Add(val);
 
-                if (set.Count > sampleSize * 0.8) return false;
+                // If sample has > 50% unique values -> High Card
+                if (set.Count > (sampleSize * 0.5)) return false;
             }
             return true;
+        }
+
+        // Helper: Convert String Column To Category Column using optimized Unsafe Converter
+        private static CategoryColumn ConvertStringColumnToCategory(StringColumn sc)
+        {
+            var cat = ParallelStringConverter.Convert(sc);
+            return cat;
         }
     }
 }
@@ -9914,6 +10715,7 @@ namespace LeichtFrame.Core.Engine.Memory
     public class NullBitmap : IDisposable
     {
         private ulong[] _buffer;
+        internal ulong[] RawBuffer => _buffer;
         private int _capacity;
 
         /// <summary>
@@ -10762,7 +11564,7 @@ namespace LeichtFrame.Core.Execution
                                      && alias.Child is AggExpr agg
                                      && agg.Op == AggOpType.Count;
 
-                if (isSimpleCount && gdf.NativeData != null)
+                if (isSimpleCount && gdf.NativeData != null && groupCols.Length == 1)
                 {
                     var aliasExpr = (AliasExpr)_node.AggExprs[0];
                     return new FastNativeCountEnumerator(gdf, groupCols[0], aliasExpr.Alias);

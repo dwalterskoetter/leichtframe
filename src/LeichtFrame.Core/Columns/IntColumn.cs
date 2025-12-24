@@ -560,16 +560,14 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Internal Move-Constructor.
-        /// Adopts the provided array as internal storage without copying.
-        /// Can optionally derive nulls from '0' values (used for CategoryColumn).
+        /// Adopts the provided array.
         /// </summary>
-        internal IntColumn(string name, int[] adoptedData, int length, bool deriveNullsFromZero = false)
+        internal IntColumn(string name, int[] adoptedData, int length, bool deriveNullsFromZero = false, bool isPooled = false)
             : base(name, isNullable: deriveNullsFromZero)
         {
             _data = adoptedData;
             _length = length;
-
-            _isPooledMemory = false;
+            _isPooledMemory = isPooled;
 
             if (deriveNullsFromZero)
             {

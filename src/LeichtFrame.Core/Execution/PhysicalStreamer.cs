@@ -13,10 +13,10 @@ namespace LeichtFrame.Core.Execution
     public static class PhysicalStreamer
     {
         /// <summary>
-        /// Execute Logical Plan
+        /// Execute Logical Plan and return a lazy enumerable of RowViews.
         /// </summary>
-        /// <param name="plan"></param>
-        /// <returns></returns>
+        /// <param name="plan">The logical plan.</param>
+        /// <returns>Streaming RowViews.</returns>
         public static IEnumerable<RowView> Execute(LogicalPlan plan)
         {
             if (plan is Aggregate aggNode)
@@ -61,13 +61,13 @@ namespace LeichtFrame.Core.Execution
                                      && alias.Child is AggExpr agg
                                      && agg.Op == AggOpType.Count;
 
-                if (isSimpleCount && gdf.NativeData != null && groupCols.Length == 1)
+                if (isSimpleCount && gdf.NativeData != null)
                 {
                     var aliasExpr = (AliasExpr)_node.AggExprs[0];
-                    return new FastNativeCountEnumerator(gdf, groupCols[0], aliasExpr.Alias);
+                    return new FastNativeCountEnumerator(gdf, groupCols, aliasExpr.Alias);
                 }
 
-                // Fallback / Slow Path
+                // Fallback / Slow Path (Materialize everything)
                 var planner = new PhysicalPlanner();
                 var aggDefs = planner.MapAggregations(_node.AggExprs);
                 var materializedResult = gdf.Aggregate(aggDefs);
@@ -93,11 +93,11 @@ namespace LeichtFrame.Core.Execution
             private bool _inNullGroup = false;
 
             // Flyweight Components
-            private readonly IFlyweightKeyColumn _keyCol;
+            private readonly IFlyweightKeyColumn[] _keyCols;
             private readonly ScalarIntColumn _valCol;
             private readonly RowView _currentView;
 
-            public FastNativeCountEnumerator(GroupedDataFrame gdf, string keyName, string countName)
+            public FastNativeCountEnumerator(GroupedDataFrame gdf, string[] keyNames, string countName)
             {
                 _gdf = gdf;
                 _native = gdf.NativeData!;
@@ -107,31 +107,38 @@ namespace LeichtFrame.Core.Execution
                 _groupCount = _native.GroupCount;
 
                 _valCol = new ScalarIntColumn(countName);
+                _keyCols = new IFlyweightKeyColumn[keyNames.Length];
 
-                // --- KEY COLUMN FACTORY ---
-                var sourceCol = gdf.Source[keyName];
+                var viewColumns = new IColumn[keyNames.Length + 1];
+                var schemaCols = new List<ColumnDefinition>();
 
-                if (gdf.KeysAreRowIndices)
+                for (int i = 0; i < keyNames.Length; i++)
                 {
-                    // Indirect Mode: Native Key = RowIndex
-                    _keyCol = CreateIndirectColumn(sourceCol, keyName);
+                    string name = keyNames[i];
+                    var sourceCol = gdf.Source[name];
+
+                    // --- KEY COLUMN FACTORY ---
+                    if (gdf.KeysAreRowIndices)
+                    {
+                        _keyCols[i] = CreateIndirectColumn(sourceCol, name);
+                    }
+                    else
+                    {
+                        if (sourceCol.DataType != typeof(int))
+                            throw new InvalidOperationException("Direct Native Keys only supported for Int.");
+
+                        _keyCols[i] = new ScalarIntColumn(name);
+                    }
+
+                    viewColumns[i] = (IColumn)_keyCols[i];
+                    schemaCols.Add(new ColumnDefinition(name, _keyCols[i].DataType, IsNullable: true));
                 }
-                else
-                {
-                    // Direct Mode: Native Key = Value
-                    if (sourceCol.DataType != typeof(int))
-                        throw new InvalidOperationException("Direct Native Keys only supported for Int.");
 
-                    _keyCol = new ScalarIntColumn(keyName);
-                }
+                viewColumns[keyNames.Length] = _valCol;
+                schemaCols.Add(new ColumnDefinition(countName, typeof(int)));
 
-                // Schema bauen
-                var schema = new DataFrameSchema(new[] {
-                    new ColumnDefinition(keyName, _keyCol.DataType, IsNullable: true),
-                    new ColumnDefinition(countName, typeof(int))
-                });
-
-                _currentView = new RowView(0, new IColumn[] { (IColumn)_keyCol, _valCol }, schema);
+                var schema = new DataFrameSchema(schemaCols);
+                _currentView = new RowView(0, viewColumns, schema);
             }
 
             private IFlyweightKeyColumn CreateIndirectColumn(IColumn source, string name)
@@ -150,7 +157,6 @@ namespace LeichtFrame.Core.Execution
 
             public bool MoveNext()
             {
-                // A. Native Groups
                 if (_currentIndex < _groupCount - 1)
                 {
                     _currentIndex++;
@@ -158,8 +164,10 @@ namespace LeichtFrame.Core.Execution
                     int keyOrIndex = _pKeys[_currentIndex];
                     int count = _pOffsets[_currentIndex + 1] - _pOffsets[_currentIndex];
 
-                    // Update Flyweights
-                    _keyCol.SetData(keyOrIndex, isNull: false);
+                    for (int i = 0; i < _keyCols.Length; i++)
+                    {
+                        _keyCols[i].SetData(keyOrIndex, isNull: false);
+                    }
 
                     _valCol.Value = count;
                     _valCol.IsNullValue = false;
@@ -167,12 +175,14 @@ namespace LeichtFrame.Core.Execution
                     return true;
                 }
 
-                // B. Null Group
                 if (!_inNullGroup && _gdf.NullGroupIndices != null && _gdf.NullGroupIndices.Length > 0)
                 {
                     _inNullGroup = true;
 
-                    _keyCol.SetData(0, isNull: true); // Key is Null
+                    for (int i = 0; i < _keyCols.Length; i++)
+                    {
+                        _keyCols[i].SetData(0, isNull: true);
+                    }
 
                     _valCol.Value = _gdf.NullGroupIndices.Length;
                     _valCol.IsNullValue = false;
@@ -197,7 +207,7 @@ namespace LeichtFrame.Core.Execution
             void SetData(int keyOrIndex, bool isNull);
         }
 
-        // 1. Direct Int Column
+        // 1. Direct Int Column (Holds the value directly)
         private class ScalarIntColumn : IColumn<int>, IFlyweightKeyColumn
         {
             public int Value;
@@ -236,7 +246,7 @@ namespace LeichtFrame.Core.Execution
             public object? ComputeMax(int[] indices, int start, int end) => null;
         }
 
-        // 2. Indirect Column (Lookup from Source)
+        // 2. Indirect Column
         private class IndirectScalarColumn<T> : IColumn<T>, IFlyweightKeyColumn
         {
             private readonly IColumn<T> _source;

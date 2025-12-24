@@ -71,7 +71,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                     codes[i] = foundCode;
                 }
             }
-            return CategoryColumn.CreateFromInternals(col.Name, codes, dictionary);
+            return CategoryColumn.CreateFromInternals(col.Name, codes, rowCount, dictionary);
         }
 
         private static bool BytesEqualString(byte* pBytes, int len, string str)

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -19,7 +20,8 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
             int rowCount = col.Length;
             int parallelism = Environment.ProcessorCount;
 
-            int[] finalCodes = new int[rowCount];
+            int[] finalCodes = ArrayPool<int>.Shared.Rent(rowCount);
+
             var partitions = Partitioner.Create(0, rowCount, rowCount / parallelism);
             var localResults = new LocalResult[parallelism];
 
@@ -46,12 +48,12 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                 });
             }
 
-            return MergeAndCreate(col.Name, finalCodes, localResults);
+            return MergeAndCreate(col.Name, rowCount, finalCodes, localResults);
         }
 
         private static CategoryColumn ConvertSingleThreaded(StringColumn col)
         {
-            int[] finalCodes = new int[col.Length];
+            int[] finalCodes = ArrayPool<int>.Shared.Rent(col.Length);
             var result = new LocalResult[1];
 
             fixed (byte* pBytes = col.RawBytes)
@@ -62,10 +64,10 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                 result[0] = ProcessChunk(0, col.Length, pBytes, pOffsets, pCodes, pNulls);
             }
 
-            return MergeAndCreate(col.Name, finalCodes, result);
+            return MergeAndCreate(col.Name, col.Length, finalCodes, result);
         }
 
-        private static CategoryColumn MergeAndCreate(string name, int[] finalCodes, LocalResult[] results)
+        private static CategoryColumn MergeAndCreate(string name, int rowCount, int[] finalCodes, LocalResult[] results)
         {
             var globalDict = new List<string?> { null };
             var globalLookup = new Dictionary<string, int>();
@@ -94,7 +96,6 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                 remapTables[t] = map;
             }
 
-            int rowCount = finalCodes.Length;
             int parallelism = results.Length;
 
             if (parallelism == 1)
@@ -123,8 +124,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                     });
                 }
             }
-
-            return CategoryColumn.CreateFromInternals(name, finalCodes, globalDict);
+            return CategoryColumn.CreateFromInternals(name, finalCodes, rowCount, globalDict, isPooledCodes: true);
         }
 
         private struct LocalResult { public List<string> LocalDict; }
@@ -133,6 +133,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
         private static LocalResult ProcessChunk(int start, int end, byte* pBytes, int* pOffsets, int* pOutCodes, ulong* pNulls)
         {
             var dictList = new List<string> { null! };
+
             var map = new NativeLocalMap();
             map.Init(1024, pBytes);
 
@@ -219,11 +220,14 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
             _count = 1;
             _globalBytes = globalBytes;
 
-            nuint size = (nuint)(_capacity * sizeof(int));
-            Buckets = (int*)NativeMemory.Alloc(size);
+            nuint bucketBytes = (nuint)(_capacity * sizeof(int));
+            nuint metaBytes = (nuint)(_capacity * sizeof(int));
+
+            Buckets = (int*)NativeMemory.Alloc(bucketBytes);
             new Span<int>(Buckets, _capacity).Fill(-1);
-            KeyOffsets = (int*)NativeMemory.Alloc(size);
-            KeyLengths = (int*)NativeMemory.Alloc(size);
+
+            KeyOffsets = (int*)NativeMemory.Alloc(metaBytes);
+            KeyLengths = (int*)NativeMemory.Alloc(metaBytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -241,10 +245,13 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                 if (code == -1)
                 {
                     code = _count;
+
                     KeyOffsets[code] = offset;
                     KeyLengths[code] = len;
                     buckets[idx] = code;
+
                     stringAccumulator.Add(Encoding.UTF8.GetString(_globalBytes + offset, len));
+
                     _count++;
                     return code;
                 }
@@ -282,6 +289,7 @@ namespace LeichtFrame.Core.Engine.Algorithms.Converter
                 {
                     int off = KeyOffsets[code];
                     int len = KeyLengths[code];
+
                     int h = unchecked((int)2166136261);
                     byte* ptr = _globalBytes + off;
                     int l = len;

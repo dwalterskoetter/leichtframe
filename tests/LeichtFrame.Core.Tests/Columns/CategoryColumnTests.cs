@@ -65,7 +65,8 @@ namespace LeichtFrame.Core.Tests.Columns
             int[] codes = new int[] { 1, 2, 1, 0 };
             var dict = new List<string?> { null, "A", "B" };
 
-            using var col = CategoryColumn.CreateFromInternals("Reconstructed", codes, dict);
+            // FIX: codes.Length als 3. Argument hinzugefügt
+            using var col = CategoryColumn.CreateFromInternals("Reconstructed", codes, codes.Length, dict);
 
             Assert.Equal(4, col.Length);
             Assert.Equal("A", col.Get(0));
