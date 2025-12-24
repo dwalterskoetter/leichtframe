@@ -1,4 +1,5 @@
 using LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies;
+using LeichtFrame.Core.Engine.Algorithms.Converter;
 
 namespace LeichtFrame.Core.Engine.Kernels.GroupBy
 {
@@ -11,7 +12,22 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy
 
             if (rowCount == 0) return new GenericHashMapStrategy().Group(df, columnName);
 
-            // --- INT ---
+            if (col is CategoryColumn catCol)
+            {
+                // Super-Fast Path: Direct Addressing on integer codes.
+                var strategy = new DirectAddressingStrategy(min: 0, max: catCol.Cardinality);
+                var nativeData = strategy.ComputeNative(catCol.Codes, df.RowCount);
+
+                return new DictionaryGroupedDataFrame(
+                    df,
+                    new[] { columnName },
+                    nativeData,
+                    catCol.DictionaryArray,
+                    hasNullCodeZero: true
+                );
+            }
+
+            // --- 2. INT ---
             if (col is IntColumn intCol)
             {
                 int min = intCol.Min();
@@ -27,19 +43,31 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy
                 return new IntSwissMapStrategy().Group(df, columnName);
             }
 
-            // --- STRING ---
+            // --- 3. STRING ---
             if (col is StringColumn strCol)
             {
-                // Low Cardinality -> String Dictionary
+                // Low Cardinality -> Auto-Convert to Category -> String Dictionary
                 if (IsLikelyLowCardinality(strCol, rowCount))
                 {
-                    return new StringDictionaryStrategy().Group(df, columnName);
+                    using var autoCatCol = ConvertStringColumnToCategory(strCol);
+
+                    var strategy = new DirectAddressingStrategy(min: 0, max: autoCatCol.Cardinality);
+                    var nativeData = strategy.ComputeNative(autoCatCol.Codes, rowCount);
+
+                    return new DictionaryGroupedDataFrame(
+                        df,
+                        new[] { columnName },
+                        nativeData,
+                        autoCatCol.DictionaryArray,
+                        hasNullCodeZero: true
+                    );
                 }
 
                 // High Cardinality -> String Swiss Map
                 return new StringSwissMapStrategy().Group(df, columnName);
             }
 
+            // --- 4. FALLBACK (Generic) ---
             return new GenericHashMapStrategy().Group(df, columnName);
         }
 
@@ -69,20 +97,31 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy
         // Helper: Detect Low Cardinality via Sampling
         private static bool IsLikelyLowCardinality(StringColumn col, int rowCount)
         {
-            if (rowCount < 1024) return false;
+            if (rowCount == 0) return false;
 
-            int sampleSize = 64;
+            int sampleSize = 128;
             var set = new HashSet<string>();
-
             int step = rowCount / sampleSize;
+            if (step == 0) step = 1;
+
             for (int i = 0; i < rowCount; i += step)
             {
+                if (set.Count >= sampleSize) break;
+
                 string? val = col.Get(i);
                 if (val != null) set.Add(val);
 
-                if (set.Count > sampleSize * 0.8) return false;
+                // If sample has > 50% unique values -> High Card
+                if (set.Count > (sampleSize * 0.5)) return false;
             }
             return true;
+        }
+
+        // Helper: Convert String Column To Category Column using optimized Unsafe Converter
+        private static CategoryColumn ConvertStringColumnToCategory(StringColumn sc)
+        {
+            var cat = ParallelStringConverter.Convert(sc);
+            return cat;
         }
     }
 }

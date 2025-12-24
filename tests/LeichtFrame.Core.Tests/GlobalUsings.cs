@@ -11,6 +11,7 @@ global using LeichtFrame.Core.Engine;
 global using LeichtFrame.Core.Engine.Memory;
 global using LeichtFrame.Core.Expressions;
 global using LeichtFrame.Core.Engine.Kernels.GroupBy;
+global using LeichtFrame.Core.Engine.Algorithms.Converter;
 
 // Operations
 global using LeichtFrame.Core.Operations.Aggregate;

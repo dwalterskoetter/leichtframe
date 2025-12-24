@@ -83,5 +83,37 @@ namespace LeichtFrame.Core.Tests.Columns
 
             Assert.ThrowsAny<Exception>(() => col.Get(0));
         }
+
+        [Fact]
+        public void Internal_Constructor_Derives_Nulls_From_Zero()
+        {
+            int[] data = new int[] { 1, 0, 5, 0 };
+
+            using var col = new IntColumn("Derived", data, 4, deriveNullsFromZero: true);
+
+            Assert.Equal(4, col.Length);
+
+            Assert.False(col.IsNull(0));
+            Assert.Equal(1, col.Get(0));
+
+            Assert.True(col.IsNull(1));
+
+            Assert.False(col.IsNull(2));
+            Assert.Equal(5, col.Get(2));
+
+            Assert.True(col.IsNull(3));
+        }
+
+        [Fact]
+        public void Dispose_DoesNotReturn_ExternalArrays_ToPool()
+        {
+            int[] externalData = new int[100];
+
+            using (var col = new IntColumn("External", externalData, 100, false))
+            {
+                Assert.Equal(100, col.Length);
+                Assert.Equal(0, col.Get(0));
+            }
+        }
     }
 }

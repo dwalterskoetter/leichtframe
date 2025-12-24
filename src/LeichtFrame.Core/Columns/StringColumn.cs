@@ -19,6 +19,7 @@ namespace LeichtFrame.Core
 
         // 3. Nulls: Bitmap for null values.
         private NullBitmap? _nulls;
+        internal NullBitmap? InternalNulls => _nulls;
 
         private int _length;          // Number of rows
         private int _totalByteCount;  // Currently used bytes in _values

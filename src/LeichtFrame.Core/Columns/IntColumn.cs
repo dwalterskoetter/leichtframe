@@ -16,6 +16,7 @@ namespace LeichtFrame.Core
         private int[] _data;
         private NullBitmap? _nulls;
         private int _length;
+        private bool _isPooledMemory;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="IntColumn"/> class.
@@ -28,6 +29,7 @@ namespace LeichtFrame.Core
         {
             _length = 0;
             _data = ArrayPool<int>.Shared.Rent(capacity);
+            _isPooledMemory = true;
 
             if (isNullable)
             {
@@ -136,28 +138,23 @@ namespace LeichtFrame.Core
             {
                 var vectors = MemoryMarshal.Cast<int, Vector<int>>(span);
 
-                // We utilize Vector<long> to accumulate sums to prevent 32-bit overflow.
                 var accVectorLow = Vector<long>.Zero;
                 var accVectorHigh = Vector<long>.Zero;
 
                 foreach (var v in vectors)
                 {
-                    // Widen: Split Vector<int> into two Vector<long>
                     Vector.Widen(v, out var low, out var high);
                     accVectorLow += low;
                     accVectorHigh += high;
                 }
 
-                // Sum up the lanes of the long accumulators
                 sum += Vector.Sum(accVectorLow);
                 sum += Vector.Sum(accVectorHigh);
 
-                // Handle remaining elements (Tail)
                 int processed = vectors.Length * Vector<int>.Count;
                 span = span.Slice(processed);
             }
 
-            // Scalar fallback / Tail loop
             foreach (var val in span)
             {
                 sum += val;
@@ -173,8 +170,6 @@ namespace LeichtFrame.Core
         {
             if (_length == 0) return 0;
 
-            // SIMD is only safe for non-nullable columns because '0' (null representation) 
-            // would falsify the Min calculation.
             if (IsNullable)
             {
                 return MinNullable();
@@ -193,7 +188,6 @@ namespace LeichtFrame.Core
                     minVector = Vector.Min(minVector, v);
                 }
 
-                // Reduce vector lanes
                 for (int i = 0; i < Vector<int>.Count; i++)
                 {
                     if (minVector[i] < min) min = minVector[i];
@@ -253,7 +247,6 @@ namespace LeichtFrame.Core
             return max;
         }
 
-        // Fallback helpers for Nullable types (Scalar loop with null checks)
         private int MinNullable()
         {
             int min = int.MaxValue;
@@ -297,8 +290,14 @@ namespace LeichtFrame.Core
 
             var newBuffer = ArrayPool<int>.Shared.Rent(newCapacity);
             Array.Copy(_data, newBuffer, _length);
-            ArrayPool<int>.Shared.Return(_data);
+
+            if (_isPooledMemory)
+            {
+                ArrayPool<int>.Shared.Return(_data);
+            }
+
             _data = newBuffer;
+            _isPooledMemory = true;
 
             _nulls?.Resize(newCapacity);
         }
@@ -334,7 +333,10 @@ namespace LeichtFrame.Core
         {
             if (_data != null)
             {
-                ArrayPool<int>.Shared.Return(_data);
+                if (_isPooledMemory)
+                {
+                    ArrayPool<int>.Shared.Return(_data);
+                }
                 _data = null!;
             }
 
@@ -425,11 +427,10 @@ namespace LeichtFrame.Core
         public override object? ComputeSum(int[] indices, int start, int end)
         {
             long sum = 0;
-            var data = _data; // Local ref for performance optimization
+            var data = _data;
 
             if (!IsNullable)
             {
-                // Non-nullable path: tight loop
                 for (int i = start; i < end; i++)
                 {
                     sum += data[indices[i]];
@@ -437,7 +438,6 @@ namespace LeichtFrame.Core
             }
             else
             {
-                // Nullable path: check null bitmap
                 var nulls = _nulls!;
                 for (int i = start; i < end; i++)
                 {
@@ -560,13 +560,30 @@ namespace LeichtFrame.Core
 
         /// <summary>
         /// Internal Move-Constructor.
+        /// Adopts the provided array as internal storage without copying.
+        /// Can optionally derive nulls from '0' values (used for CategoryColumn).
         /// </summary>
-        internal IntColumn(string name, int[] adoptedData, int length)
-            : base(name, isNullable: false)
+        internal IntColumn(string name, int[] adoptedData, int length, bool deriveNullsFromZero = false)
+            : base(name, isNullable: deriveNullsFromZero)
         {
             _data = adoptedData;
             _length = length;
-            _nulls = null;
+
+            _isPooledMemory = false;
+
+            if (deriveNullsFromZero)
+            {
+                _nulls = new NullBitmap(length);
+                for (int i = 0; i < length; i++)
+                {
+                    if (_data[i] == 0) _nulls.SetNull(i);
+                    else _nulls.SetNotNull(i);
+                }
+            }
+            else
+            {
+                _nulls = null;
+            }
         }
     }
 }
