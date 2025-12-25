@@ -4,6 +4,7 @@ using LeichtFrame.Core.Operations.GroupBy;
 using LeichtFrame.Core.Operations.Aggregate;
 using LeichtFrame.Core.Expressions;
 using LeichtFrame.Core.Engine;
+using LeichtFrame.Core.Execution.Materialization;
 
 namespace LeichtFrame.Core.Execution
 {
