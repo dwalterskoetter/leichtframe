@@ -13,10 +13,7 @@ namespace LeichtFrame.Core.Engine.Kernels.Aggregate
             int validGroups = native.GroupCount - startIdx;
             if (validGroups < 0) validGroups = 0;
 
-            bool hasManagedNulls = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
-            bool hasNativeNulls = startIdx == 1;
-
-            bool hasNulls = hasManagedNulls || hasNativeNulls;
+            bool hasNulls = (gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0) || startIdx == 1;
 
             int totalRows = validGroups + (hasNulls ? 1 : 0);
             return (startIdx, validGroups, totalRows, hasNulls);
@@ -63,15 +60,18 @@ namespace LeichtFrame.Core.Engine.Kernels.Aggregate
             bool useManaged = gdf.NullGroupIndices != null && gdf.NullGroupIndices.Length > 0;
             bool useNative = !useManaged && startIdx == 1;
 
+            // Handle Count (Int Result)
             if (resCol is IntColumn icRes && (valSource == null || resCol.Name.StartsWith("Count")))
             {
                 int count = 0;
                 if (useManaged) count = gdf.NullGroupIndices!.Length;
                 else if (useNative) count = native.Offsets.Ptr[1] - native.Offsets.Ptr[0];
+
                 icRes.Append(count);
                 return;
             }
 
+            // Handle Sum/Min/Max (Logic requiring Source)
             if (valSource != null)
             {
                 var span = valSource.Values.Span;
@@ -91,11 +91,9 @@ namespace LeichtFrame.Core.Engine.Kernels.Aggregate
                         for (int k = 0; k < end; k++) sum += span[pIndices[k]];
                     }
                     dcRes.Append(sum);
-                    return;
                 }
-
                 // Min/Max (Int Result)
-                if (resCol is IntColumn icResVal)
+                else if (resCol is IntColumn icResVal)
                 {
                     bool isMin = resCol.Name.StartsWith("Min");
                     int val = isMin ? int.MaxValue : int.MinValue;

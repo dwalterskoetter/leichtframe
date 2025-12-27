@@ -7,7 +7,6 @@ namespace LeichtFrame.Core
     {
         private readonly string?[] _dictionary;
         private readonly bool _hasNullCodeZero;
-
         private string[]? _resolvedKeys;
         private int[]? _nullIndices;
         private int[]? _offsets;
@@ -32,7 +31,6 @@ namespace LeichtFrame.Core
             get
             {
                 if (!_hasNullCodeZero || NativeData == null || NativeData.GroupCount == 0) return 0;
-
                 unsafe
                 {
                     return NativeData.Keys.Ptr[0] == 0 ? 1 : 0;
@@ -49,7 +47,8 @@ namespace LeichtFrame.Core
             int startGroupIdx = NativeStartOffset;
             int validGroupCount = rawCount - startGroupIdx;
 
-            if (startGroupIdx == 1)
+            // 1. Extract Null Indices (if not already lazy loaded)
+            if (startGroupIdx == 1 && _nullIndices == null)
             {
                 int* pOffsets = NativeData.Offsets.Ptr;
                 int* pIndices = NativeData.Indices.Ptr;
@@ -60,6 +59,7 @@ namespace LeichtFrame.Core
                 Marshal.Copy((nint)pIndices + (start * 4), _nullIndices, 0, len);
             }
 
+            // 2. Resolve Keys
             int* pRawKeys = NativeData.Keys.Ptr;
             _resolvedKeys = new string[validGroupCount];
             for (int i = 0; i < validGroupCount; i++)
@@ -68,6 +68,7 @@ namespace LeichtFrame.Core
                 _resolvedKeys[i] = _dictionary[code]!;
             }
 
+            // 3. Shift Offsets
             int* pRawOffsets = NativeData.Offsets.Ptr;
             _offsets = new int[validGroupCount + 1];
             int shift = (startGroupIdx == 1) ? pRawOffsets[1] : 0;
@@ -77,6 +78,7 @@ namespace LeichtFrame.Core
                 _offsets[i] = pRawOffsets[i + startGroupIdx] - shift;
             }
 
+            // 4. Copy Indices (Heavy Allocation)
             int totalIndices = pRawOffsets[rawCount] - shift;
             _indices = new int[totalIndices];
             Marshal.Copy((nint)NativeData.Indices.Ptr + (shift * 4), _indices, 0, totalIndices);
@@ -95,7 +97,35 @@ namespace LeichtFrame.Core
         public override Array GetKeys() { EnsureParsed(); return _resolvedKeys!; }
         public override int[] GroupOffsets { get { EnsureParsed(); return _offsets!; } }
         public override int[] RowIndices { get { EnsureParsed(); return _indices!; } }
-        public override int[]? NullGroupIndices { get { EnsureParsed(); return _nullIndices; } }
+        public override int[]? NullGroupIndices
+        {
+            get
+            {
+                if (_nullIndices != null) return _nullIndices;
+
+                if (NativeData != null && NativeStartOffset == 1)
+                {
+                    unsafe
+                    {
+                        int* pOffsets = NativeData.Offsets.Ptr;
+                        int start = pOffsets[0];
+                        int end = pOffsets[1];
+                        int len = end - start;
+                        if (len > 0)
+                        {
+                            _nullIndices = new int[len];
+                            Marshal.Copy((nint)NativeData.Indices.Ptr + (start * 4), _nullIndices, 0, len);
+                            return _nullIndices;
+                        }
+                    }
+                }
+
+                if (NativeData != null) return null;
+
+                EnsureParsed();
+                return _nullIndices;
+            }
+        }
 
         public override void Dispose()
         {

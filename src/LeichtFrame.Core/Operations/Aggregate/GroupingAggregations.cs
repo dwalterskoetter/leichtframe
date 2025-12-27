@@ -1,12 +1,40 @@
 using System.Runtime.CompilerServices;
+using LeichtFrame.Core.Engine.Kernels.Aggregate;
 
 namespace LeichtFrame.Core.Operations.Aggregate
 {
     /// <summary>
-    /// Extension methods for streaming aggregations.
+    /// Provides extension methods for performing aggregations and streaming on grouped dataframes.
     /// </summary>
-    public static class StreamingAggregationExtensions
+    public static class GroupAggregationExtensions
     {
+        // --- Materialization (DataFrame Result) ---
+
+        /// <inheritdoc/>
+        public static DataFrame Count(this GroupedDataFrame gdf) => AggregateDispatcher.Count(gdf);
+
+        /// <inheritdoc/>
+        public static DataFrame Sum(this GroupedDataFrame gdf, string columnName)
+            => AggregateDispatcher.Sum(gdf, columnName);
+
+        /// <inheritdoc/>
+        public static DataFrame Min(this GroupedDataFrame gdf, string columnName)
+            => AggregateDispatcher.Min(gdf, columnName);
+
+        /// <inheritdoc/>
+        public static DataFrame Max(this GroupedDataFrame gdf, string columnName)
+            => AggregateDispatcher.Max(gdf, columnName);
+
+        /// <inheritdoc/>
+        public static DataFrame Mean(this GroupedDataFrame gdf, string columnName)
+            => AggregateDispatcher.Mean(gdf, columnName);
+
+        /// <inheritdoc/>
+        public static DataFrame Aggregate(this GroupedDataFrame gdf, params AggregationDef[] aggregations)
+            => AggregateDispatcher.Aggregate(gdf, aggregations);
+
+        // --- Streaming (Zero-Alloc Enumerator) ---
+
         /// <summary>
         /// Provides a zero-allocation streaming enumerator over group key/count pairs.
         /// Enables high-performance aggregation scenarios.
@@ -18,7 +46,7 @@ namespace LeichtFrame.Core.Operations.Aggregate
     }
 
     /// <summary>
-    /// The "Enumerable" (Struct, to avoid allocation).
+    /// The "Enumerable" (Struct, to avoid allocation) for Streaming Count.
     /// </summary>
     public readonly struct GroupCountStream
     {
@@ -29,15 +57,12 @@ namespace LeichtFrame.Core.Operations.Aggregate
             _gdf = gdf;
         }
 
-        /// <summary>
-        /// Gets the enumerator.
-        /// </summary>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public GroupCountEnumerator GetEnumerator() => new GroupCountEnumerator(_gdf);
     }
 
     /// <summary>
-    /// The "Enumerator" (Ref Struct). 
+    /// The "Enumerator" (Ref Struct) for Streaming Count.
     /// Wrapper for NativeGroupCountReader.
     /// </summary>
     public ref struct GroupCountEnumerator
@@ -56,29 +81,23 @@ namespace LeichtFrame.Core.Operations.Aggregate
             _currentCount = 0;
         }
 
-        /// <summary>
-        /// Advances to the next key/count pair.
-        /// </summary>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
         {
             return _reader.Read(out _currentKey, out _currentCount);
         }
-        /// <summary>
-        /// Gets the current key/count pair.
-        /// </summary>
+
+        /// <inheritdoc/>
         public (int Key, int Count) Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => (_currentKey, _currentCount);
         }
 
-        /// <summary>
-        /// Disposes the enumerator.
-        /// </summary>
+        /// <inheritdoc/>
         public void Dispose()
         {
-            _gdf.Dispose();
         }
     }
 }
