@@ -20,7 +20,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             int shift = 32 - System.Numerics.BitOperations.Log2((uint)partitionCount);
             int[] partitionOffsets = new int[partitionCount + 1];
 
-            // 1. Partitionierung (Shuffle)
+            // 1. Partitionierung (Shuffle) - Zero Alloc
             RadixPartitioner.Partition(
                 pHashes, rowCount, partitionCount, shift,
                 out int* pPartHashes, out int* pPartRowIndices, partitionOffsets
@@ -58,10 +58,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 
                         int groupCount = map.Count;
                         var localRes = new NativeGroupedData(len, groupCount);
-
-                        int[] keys = map.ExportKeysAsRowIndices();
-                        Marshal.Copy(keys, 0, (nint)localRes.Keys.Ptr, groupCount);
-
+                        map.ExportRowIndicesTo(localRes.Keys.Ptr);
                         BuildCsr(pLocalGroupIds, localRes, len, groupCount);
                         partitionResults[p] = localRes;
                     }

@@ -20,39 +20,50 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             int* pRowToGroupId = (int*)NativeMemory.Alloc((nuint)(rowCount * sizeof(int)));
 
             NativeIntMap map = new NativeIntMap(Math.Max(1024, rowCount / 10));
-            var nullIndices = new List<int>();
+
+            List<int>? nullIndices = null;
+            bool isNullable = col.IsNullable;
 
             try
             {
                 // =========================================================
-                // PHASE 1: Build Map & Assign IDs (The Heavy Lifting)
+                // PHASE 1: Build Map & Assign IDs
                 // =========================================================
                 ReadOnlySpan<int> data = col.Values.Span;
                 fixed (int* pData = data)
                 {
-                    for (int i = 0; i < rowCount; i++)
+                    if (isNullable)
                     {
-                        if (col.IsNull(i))
+                        for (int i = 0; i < rowCount; i++)
                         {
-                            nullIndices.Add(i);
-                            pRowToGroupId[i] = -1;
-                            continue;
+                            if (col.IsNull(i))
+                            {
+                                if (nullIndices == null) nullIndices = new List<int>();
+                                nullIndices.Add(i);
+                                pRowToGroupId[i] = -1;
+                                continue;
+                            }
+                            pRowToGroupId[i] = map.GetOrAdd(pData[i]);
                         }
-
-                        pRowToGroupId[i] = map.GetOrAdd(pData[i]);
+                    }
+                    else
+                    {
+                        for (int i = 0; i < rowCount; i++)
+                        {
+                            pRowToGroupId[i] = map.GetOrAdd(pData[i]);
+                        }
                     }
                 }
 
                 int groupCount = map.Count;
 
                 // =========================================================
-                // PHASE 2: Build CSR (Count Sort Style)
+                // PHASE 2: Build CSR
                 // =========================================================
 
                 var resultNative = new NativeGroupedData(rowCount, groupCount);
 
-                int[] managedKeys = map.ExportKeys();
-                Marshal.Copy(managedKeys, 0, (nint)resultNative.Keys.Ptr, groupCount);
+                map.ExportKeysTo(resultNative.Keys.Ptr);
 
                 int* pOffsets = resultNative.Offsets.Ptr;
                 int* pIndices = resultNative.Indices.Ptr;
@@ -97,7 +108,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                     df,
                     new[] { colName },
                     resultNative,
-                    nullIndices.Count > 0 ? nullIndices.ToArray() : null
+                    (nullIndices != null && nullIndices.Count > 0) ? nullIndices.ToArray() : null
                 );
             }
             finally
