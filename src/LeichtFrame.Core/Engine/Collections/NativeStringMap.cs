@@ -220,19 +220,25 @@ namespace LeichtFrame.Core.Engine.Collections
             return hash;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ExportRowIndicesTo(int* destination)
+        {
+            for (int i = 0; i < _capacity; i++)
+            {
+                if (_ctrl[i] != 0)
+                {
+                    int id = _groupIds[i];
+                    destination[id] = _rowIndices[i];
+                }
+            }
+        }
+
         public int[] ExportKeysAsRowIndices()
         {
             var result = new int[_count];
             fixed (int* pRes = result)
             {
-                for (int i = 0; i < _capacity; i++)
-                {
-                    if (_ctrl[i] != Empty)
-                    {
-                        int id = _groupIds[i];
-                        pRes[id] = _rowIndices[i];
-                    }
-                }
+                ExportRowIndicesTo(pRes);
             }
             return result;
         }

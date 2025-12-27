@@ -22,6 +22,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             fixed (byte* pBytes = col.RawBytes)
             fixed (int* pOffsets = col.Offsets)
             {
+                // 1. Vectorized Hashing (Zero Alloc)
                 VectorizedHasher.HashStrings(pBytes, pOffsets, pHashes, rowCount);
 
                 if (!col.IsNullable)
@@ -37,23 +38,35 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                 }
 
                 int* pRowToGroupId = (int*)NativeMemory.Alloc((nuint)(rowCount * sizeof(int)));
-                var nullIndices = new List<int>();
+
+                List<int>? nullIndices = null;
+                bool isNullable = col.IsNullable;
 
                 var map = new NativeStringMap(Math.Max(1024, rowCount / 10), pBytes, pOffsets);
 
                 try
                 {
                     // -- PHASE 1: INSERT --
-                    for (int i = 0; i < rowCount; i++)
+                    if (isNullable)
                     {
-                        if (col.IsNull(i))
+                        for (int i = 0; i < rowCount; i++)
                         {
-                            nullIndices.Add(i);
-                            pRowToGroupId[i] = -1;
-                            continue;
+                            if (col.IsNull(i))
+                            {
+                                if (nullIndices == null) nullIndices = new List<int>();
+                                nullIndices.Add(i);
+                                pRowToGroupId[i] = -1;
+                                continue;
+                            }
+                            pRowToGroupId[i] = map.GetOrAdd(i, pHashes[i]);
                         }
-
-                        pRowToGroupId[i] = map.GetOrAdd(i, pHashes[i]);
+                    }
+                    else
+                    {
+                        for (int i = 0; i < rowCount; i++)
+                        {
+                            pRowToGroupId[i] = map.GetOrAdd(i, pHashes[i]);
+                        }
                     }
 
                     int groupCount = map.Count;
@@ -66,8 +79,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                     int* pKeysRes = resultNative.Keys.Ptr;
 
                     // A. Keys
-                    int[] repRowIndices = map.ExportKeysAsRowIndices();
-                    Marshal.Copy(repRowIndices, 0, (nint)pKeysRes, groupCount);
+                    map.ExportRowIndicesTo(pKeysRes);
 
                     // B. Histogramm
                     new Span<int>(pOffsetsRes, groupCount + 1).Fill(0);
@@ -106,7 +118,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                         df,
                         new[] { colName },
                         resultNative,
-                        nullIndices.Count > 0 ? nullIndices.ToArray() : null
+                        (nullIndices != null && nullIndices.Count > 0) ? nullIndices.ToArray() : null
                     );
 
                     gdf.KeysAreRowIndices = true;

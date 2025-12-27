@@ -20,14 +20,11 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             Parallel.For(0, rowCount, i =>
             {
                 byte* pRow = pRows + (i * width);
-
                 int h = unchecked((int)2166136261);
-
                 for (int b = 0; b < width; b++)
                 {
                     h = (h ^ pRow[b]) * 16777619;
                 }
-
                 pHashes[i] = h;
             });
 
@@ -43,12 +40,11 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 
                 int groupCount = map.Count;
                 var resultNative = new NativeGroupedData(rowCount, groupCount);
+
+                map.ExportRowIndicesTo(resultNative.Keys.Ptr);
+
                 int* pOffsets = resultNative.Offsets.Ptr;
                 int* pIndices = resultNative.Indices.Ptr;
-                int* pKeys = resultNative.Keys.Ptr;
-
-                int[] repRowIndices = map.ExportKeysAsRowIndices();
-                Marshal.Copy(repRowIndices, 0, (nint)pKeys, groupCount);
 
                 new Span<int>(pOffsets, groupCount + 1).Fill(0);
                 for (int i = 0; i < rowCount; i++) pOffsets[pRowToGroupId[i]]++;
