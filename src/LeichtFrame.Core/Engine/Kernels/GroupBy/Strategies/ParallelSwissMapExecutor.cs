@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 using LeichtFrame.Core.Engine.Algorithms.Partitioning;
 using LeichtFrame.Core.Engine.Collections;
 
@@ -8,9 +10,6 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
     {
         private const int MinRowsForParallel = 500_000;
 
-        // ---------------------------------------------------------
-        // STRING VARIANT
-        // ---------------------------------------------------------
         public static NativeGroupedData? TryExecuteString(
             byte* pBytes, int* pOffsets, int* pHashes, int rowCount)
         {
@@ -20,7 +19,6 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             int shift = 32 - System.Numerics.BitOperations.Log2((uint)partitionCount);
             int[] partitionOffsets = new int[partitionCount + 1];
 
-            // 1. Partitionierung (Shuffle) - Zero Alloc
             RadixPartitioner.Partition(
                 pHashes, rowCount, partitionCount, shift,
                 out int* pPartHashes, out int* pPartRowIndices, partitionOffsets
@@ -28,7 +26,6 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 
             try
             {
-                // 2. Parallel Build (Independent Maps)
                 var partitionResults = new NativeGroupedData[partitionCount];
 
                 Parallel.For(0, partitionCount, p =>
@@ -48,17 +45,19 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 
                     try
                     {
-                        for (int i = 0; i < len; i++)
-                        {
-                            int globalRowIdx = pPartRowIndices[start + i];
-                            int hash = pPartHashes[start + i];
-
-                            pLocalGroupIds[i] = map.GetOrAdd(globalRowIdx, hash);
-                        }
+                        ExecuteWithPrefetching(
+                            pBytes, pOffsets,
+                            pPartRowIndices + start,
+                            pPartHashes + start,
+                            pLocalGroupIds,
+                            len,
+                            ref map);
 
                         int groupCount = map.Count;
                         var localRes = new NativeGroupedData(len, groupCount);
+
                         map.ExportRowIndicesTo(localRes.Keys.Ptr);
+
                         BuildCsr(pLocalGroupIds, localRes, len, groupCount);
                         partitionResults[p] = localRes;
                     }
@@ -69,7 +68,6 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                     }
                 });
 
-                // 3. Merge Results
                 return MergeResults(partitionResults, pPartRowIndices, partitionOffsets, rowCount);
             }
             finally
@@ -79,9 +77,44 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             }
         }
 
-        // ---------------------------------------------------------
-        // HELPERS
-        // ---------------------------------------------------------
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void ExecuteWithPrefetching(
+            byte* pBytes, int* pOffsets,
+            int* pRowIndices, int* pHashes, int* pOutGroupIds,
+            int count, ref NativeStringMap map)
+        {
+            if (!Sse.IsSupported)
+            {
+                for (int k = 0; k < count; k++) pOutGroupIds[k] = map.GetOrAdd(pRowIndices[k], pHashes[k]);
+                return;
+            }
+
+            const int PrefetchDist = 20;
+            int i = 0;
+            int limit = Math.Min(count, PrefetchDist);
+
+            for (; i < limit; i++)
+            {
+                int rowIdx = pRowIndices[i];
+                int offset = pOffsets[rowIdx];
+                Sse.Prefetch0(pBytes + offset);
+            }
+
+            int procIdx = 0;
+            for (; i < count; i++, procIdx++)
+            {
+                int nextRowIdx = pRowIndices[i];
+                int nextOffset = pOffsets[nextRowIdx];
+                Sse.Prefetch0(pBytes + nextOffset);
+
+                pOutGroupIds[procIdx] = map.GetOrAdd(pRowIndices[procIdx], pHashes[procIdx]);
+            }
+
+            for (; procIdx < count; procIdx++)
+            {
+                pOutGroupIds[procIdx] = map.GetOrAdd(pRowIndices[procIdx], pHashes[procIdx]);
+            }
+        }
 
         private static void BuildCsr(int* groupIds, NativeGroupedData res, int len, int groupCount)
         {
@@ -90,10 +123,8 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
 
             new Span<int>(pOffsets, groupCount + 1).Fill(0);
 
-            // Histogram
             for (int i = 0; i < len; i++) pOffsets[groupIds[i]]++;
 
-            // Prefix Sum & Temp Write Heads
             int current = 0;
             int* writeHeads = (int*)NativeMemory.Alloc((nuint)(groupCount * 4));
             for (int i = 0; i < groupCount; i++)
@@ -105,7 +136,6 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
             }
             pOffsets[groupCount] = current;
 
-            // Scatter
             for (int i = 0; i < len; i++)
             {
                 int gid = groupIds[i];

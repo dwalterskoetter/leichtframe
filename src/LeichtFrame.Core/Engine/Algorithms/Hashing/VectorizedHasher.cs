@@ -30,13 +30,9 @@ namespace LeichtFrame.Core.Engine
                         Vector256<int> k = Avx2.LoadVector256(pInput + i);
 
                         k = Avx2.Xor(k, Avx2.ShiftRightLogical(k, 16));
-
                         k = Avx2.MultiplyLow(k, vC1);
-
                         k = Avx2.Xor(k, Avx2.ShiftRightLogical(k, 13));
-
                         k = Avx2.MultiplyLow(k, vC2);
-
                         k = Avx2.Xor(k, Avx2.ShiftRightLogical(k, 16));
 
                         Avx2.Store(pHashes + i, k);
@@ -57,23 +53,45 @@ namespace LeichtFrame.Core.Engine
             int* hashes,
             int count)
         {
-            const int FnvOffsetBasis = unchecked((int)2166136261);
-            const int FnvPrime = 16777619;
+            const int Prime = 16777619;
+            const int OffsetBasis = unchecked((int)2166136261);
 
             Parallel.For(0, count, i =>
             {
                 int start = offsets[i];
                 int end = offsets[i + 1];
                 int len = end - start;
+                byte* ptr = globalBytes + start;
 
-                int hash = FnvOffsetBasis;
+                int hash = OffsetBasis;
 
-                byte* pStr = globalBytes + start;
-
-                for (int k = 0; k < len; k++)
+                while (len >= 8)
                 {
-                    hash ^= pStr[k];
-                    hash *= FnvPrime;
+                    ulong k = Unsafe.ReadUnaligned<ulong>(ptr);
+
+                    int low = (int)k;
+                    int high = (int)(k >> 32);
+
+                    hash = (hash ^ low) * Prime;
+                    hash = (hash ^ high) * Prime;
+
+                    ptr += 8;
+                    len -= 8;
+                }
+
+                if (len >= 4)
+                {
+                    int k = Unsafe.ReadUnaligned<int>(ptr);
+                    hash = (hash ^ k) * Prime;
+                    ptr += 4;
+                    len -= 4;
+                }
+
+                while (len > 0)
+                {
+                    hash = (hash ^ *ptr) * Prime;
+                    ptr++;
+                    len--;
                 }
 
                 hashes[i] = hash;

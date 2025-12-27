@@ -89,70 +89,6 @@ namespace LeichtFrame.Benchmarks
         }
 
         // =========================================================
-        // SCENARIO B: SPARSE INT (SwissMap vs Hash)
-        // =========================================================
-
-        [Benchmark(Description = "DuckDB: Sparse Int (Stream)")]
-        public long DuckDB_B_Stream()
-        {
-            using var cmd = _duckConnection.CreateCommand();
-            cmd.CommandText = "SELECT Id, COUNT(*) FROM BenchData GROUP BY Id";
-            using var reader = cmd.ExecuteReader();
-
-            long checkSum = 0;
-            while (reader.Read())
-            {
-                int key = reader.GetInt32(0);
-                long cnt = reader.GetInt64(1);
-                checkSum += key + cnt;
-            }
-            return checkSum;
-        }
-
-        [Benchmark(Description = "LF: Sparse Int (Stream)")]
-        public long LF_B_Stream()
-        {
-            var stream = _lfFrame.Lazy()
-                                 .GroupBy("Id")
-                                 .Agg("*".Count().As("Cnt"))
-                                 .CollectStream();
-
-            long checkSum = 0;
-            foreach (var row in stream)
-            {
-                int key = row.Get<int>(0);
-                int cnt = row.Get<int>(1);
-                checkSum += key + cnt;
-            }
-            return checkSum;
-        }
-
-        [Benchmark(Description = "DuckDB: Sparse Int (Mat)")]
-        public List<object[]> DuckDB_B_Mat()
-        {
-            using var cmd = _duckConnection.CreateCommand();
-            cmd.CommandText = "SELECT Id, COUNT(*) FROM BenchData GROUP BY Id";
-            using var reader = cmd.ExecuteReader();
-
-            var result = new List<object[]>();
-            while (reader.Read())
-            {
-                result.Add(new object[] { reader.GetValue(0), reader.GetValue(1) });
-            }
-            return result;
-        }
-
-        [Benchmark(Description = "LF: Sparse Int (Mat)")]
-        public DataFrame LF_B_Mat()
-        {
-            return _lfFrame.Lazy()
-                           .GroupBy("Id")
-                           .Agg("*".Count().As("Cnt"))
-                           .Collect();
-        }
-
-
-        // =========================================================
         // SCENARIO D: HIGH CARDINALITY STRING (Parallel / SwissMap)
         // =========================================================
 
@@ -189,30 +125,6 @@ namespace LeichtFrame.Benchmarks
                 checkSum += cnt + uuid.Length;
             }
             return checkSum;
-        }
-
-        [Benchmark(Description = "DuckDB: HighCard String (Mat)")]
-        public List<object[]> DuckDB_D_Mat()
-        {
-            using var cmd = _duckConnection.CreateCommand();
-            cmd.CommandText = "SELECT UUID, COUNT(*) FROM BenchData GROUP BY UUID";
-            using var reader = cmd.ExecuteReader();
-
-            var result = new List<object[]>();
-            while (reader.Read())
-            {
-                result.Add(new object[] { reader.GetValue(0), reader.GetValue(1) });
-            }
-            return result;
-        }
-
-        [Benchmark(Description = "LF: HighCard String (Mat)")]
-        public DataFrame LF_D_Mat()
-        {
-            return _lfFrame.Lazy()
-                           .GroupBy("UUID")
-                           .Agg("*".Count().As("Cnt"))
-                           .Collect();
         }
     }
 }
