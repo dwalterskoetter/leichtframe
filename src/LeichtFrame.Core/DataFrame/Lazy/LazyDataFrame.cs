@@ -1,8 +1,8 @@
 using LeichtFrame.Core.Expressions;
 using LeichtFrame.Core.Plans;
-using LeichtFrame.Core.Execution;
+using LeichtFrame.Core.Execution.Materialization; // Für PhysicalPlanner
+using LeichtFrame.Core.Execution.Streaming;      // Für PhysicalStreamer
 using LeichtFrame.Core.Optimizer;
-using LeichtFrame.Core.Execution.Materialization;
 
 namespace LeichtFrame.Core
 {
