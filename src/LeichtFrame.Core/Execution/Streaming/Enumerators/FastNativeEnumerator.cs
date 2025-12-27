@@ -76,9 +76,7 @@ namespace LeichtFrame.Core.Execution.Streaming.Enumerators
 
             viewColumns[keyNames.Length] = _resCol;
             schemaCols.Add(new ColumnDefinition(resName, resType));
-
-            var schema = new DataFrameSchema(schemaCols);
-            _currentView = new RowView(0, viewColumns, schema);
+            _currentView = new RowView(0, viewColumns, new DataFrameSchema(schemaCols));
         }
 
         private IFlyweightKeyColumn CreateIndirectColumn(IColumn source, string name)
@@ -99,7 +97,6 @@ namespace LeichtFrame.Core.Execution.Streaming.Enumerators
             if (_currentIndex < _groupCount - 1)
             {
                 _currentIndex++;
-
                 int keyOrIndex = _pKeys[_currentIndex];
                 for (int i = 0; i < _keyCols.Length; i++) _keyCols[i].SetData(keyOrIndex, isNull: false);
 
@@ -117,7 +114,7 @@ namespace LeichtFrame.Core.Execution.Streaming.Enumerators
                 bool hasNativeNull = _startIdx == 1;
                 bool hasManagedNull = _gdf.NullGroupIndices != null && _gdf.NullGroupIndices.Length > 0;
                 bool useManaged = hasManagedNull;
-                bool useNative = hasNativeNull && !useManaged;
+                bool useNative = !useManaged && hasNativeNull;
 
                 if (useManaged || useNative)
                 {

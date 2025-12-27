@@ -1,8 +1,8 @@
 using System.Collections;
 using LeichtFrame.Core.Execution.Materialization;
 using LeichtFrame.Core.Expressions;
-using LeichtFrame.Core.Operations.GroupBy;
 using LeichtFrame.Core.Operations.Aggregate;
+using LeichtFrame.Core.Operations.GroupBy;
 using LeichtFrame.Core.Plans;
 
 namespace LeichtFrame.Core.Execution.Streaming.Enumerators
