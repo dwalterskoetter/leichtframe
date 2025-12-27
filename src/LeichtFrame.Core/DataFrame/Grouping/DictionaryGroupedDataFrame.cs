@@ -7,11 +7,11 @@ namespace LeichtFrame.Core
     {
         private readonly string?[] _dictionary;
         private readonly bool _hasNullCodeZero;
+
         private string[]? _resolvedKeys;
         private int[]? _nullIndices;
         private int[]? _offsets;
         private int[]? _indices;
-        private int _realGroupCount;
 
         public DictionaryGroupedDataFrame(
             DataFrame df,
@@ -23,60 +23,83 @@ namespace LeichtFrame.Core
         {
             _dictionary = dictionary;
             _hasNullCodeZero = hasNullCodeZero;
+        }
 
-            EnsureParsed();
-            nativeData.Dispose();
-            NativeData = null;
+        internal string?[] InternalDictionary => _dictionary;
+
+        internal int NativeStartOffset
+        {
+            get
+            {
+                if (!_hasNullCodeZero || NativeData == null || NativeData.GroupCount == 0) return 0;
+
+                unsafe
+                {
+                    return NativeData.Keys.Ptr[0] == 0 ? 1 : 0;
+                }
+            }
         }
 
         private unsafe void EnsureParsed()
         {
             if (_resolvedKeys != null) return;
+            if (NativeData == null) throw new ObjectDisposedException(nameof(DictionaryGroupedDataFrame));
 
-            int rawCount = NativeData!.GroupCount;
-            int[] rawKeys = new int[rawCount];
-            int[] rawOffsets = new int[rawCount + 1];
+            int rawCount = NativeData.GroupCount;
+            int startGroupIdx = NativeStartOffset;
+            int validGroupCount = rawCount - startGroupIdx;
 
-            Marshal.Copy((nint)NativeData.Keys.Ptr, rawKeys, 0, rawCount);
-            Marshal.Copy((nint)NativeData.Offsets.Ptr, rawOffsets, 0, rawCount + 1);
-
-            bool nullGroupFound = _hasNullCodeZero && rawCount > 0 && rawKeys[0] == 0;
-            int startGroupIdx = nullGroupFound ? 1 : 0;
-            _realGroupCount = rawCount - startGroupIdx;
-
-            if (nullGroupFound)
+            if (startGroupIdx == 1)
             {
-                int start = rawOffsets[0];
-                int end = rawOffsets[1];
+                int* pOffsets = NativeData.Offsets.Ptr;
+                int* pIndices = NativeData.Indices.Ptr;
+                int start = pOffsets[0];
+                int end = pOffsets[1];
                 int len = end - start;
                 _nullIndices = new int[len];
-                Marshal.Copy((nint)NativeData.Indices.Ptr + (start * 4), _nullIndices, 0, len);
+                Marshal.Copy((nint)pIndices + (start * 4), _nullIndices, 0, len);
             }
 
-            _resolvedKeys = new string[_realGroupCount];
-            for (int i = 0; i < _realGroupCount; i++)
+            int* pRawKeys = NativeData.Keys.Ptr;
+            _resolvedKeys = new string[validGroupCount];
+            for (int i = 0; i < validGroupCount; i++)
             {
-                int code = rawKeys[i + startGroupIdx];
+                int code = pRawKeys[i + startGroupIdx];
                 _resolvedKeys[i] = _dictionary[code]!;
             }
 
-            _offsets = new int[_realGroupCount + 1];
-            int shift = nullGroupFound ? rawOffsets[1] : 0;
+            int* pRawOffsets = NativeData.Offsets.Ptr;
+            _offsets = new int[validGroupCount + 1];
+            int shift = (startGroupIdx == 1) ? pRawOffsets[1] : 0;
 
-            for (int i = 0; i <= _realGroupCount; i++)
+            for (int i = 0; i <= validGroupCount; i++)
             {
-                _offsets[i] = rawOffsets[i + startGroupIdx] - shift;
+                _offsets[i] = pRawOffsets[i + startGroupIdx] - shift;
             }
 
-            int totalIndices = rawOffsets[rawCount] - shift;
+            int totalIndices = pRawOffsets[rawCount] - shift;
             _indices = new int[totalIndices];
             Marshal.Copy((nint)NativeData.Indices.Ptr + (shift * 4), _indices, 0, totalIndices);
         }
 
-        public override int GroupCount { get { EnsureParsed(); return _realGroupCount; } }
+        public override int GroupCount
+        {
+            get
+            {
+                if (NativeData != null) return NativeData.GroupCount - NativeStartOffset;
+                EnsureParsed();
+                return _resolvedKeys!.Length;
+            }
+        }
+
         public override Array GetKeys() { EnsureParsed(); return _resolvedKeys!; }
         public override int[] GroupOffsets { get { EnsureParsed(); return _offsets!; } }
         public override int[] RowIndices { get { EnsureParsed(); return _indices!; } }
         public override int[]? NullGroupIndices { get { EnsureParsed(); return _nullIndices; } }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+        }
     }
 }
