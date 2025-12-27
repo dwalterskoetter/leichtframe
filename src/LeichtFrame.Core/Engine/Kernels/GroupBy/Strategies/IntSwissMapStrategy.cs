@@ -30,6 +30,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                 // PHASE 1: Build Map & Assign IDs
                 // =========================================================
                 ReadOnlySpan<int> data = col.Values.Span;
+
                 fixed (int* pData = data)
                 {
                     if (isNullable)
@@ -48,17 +49,14 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                     }
                     else
                     {
-                        for (int i = 0; i < rowCount; i++)
-                        {
-                            pRowToGroupId[i] = map.GetOrAdd(pData[i]);
-                        }
+                        map.BulkInsert(pData, pRowToGroupId, rowCount);
                     }
                 }
 
                 int groupCount = map.Count;
 
                 // =========================================================
-                // PHASE 2: Build CSR
+                // PHASE 2: Build CSR (Compressed Sparse Row)
                 // =========================================================
 
                 var resultNative = new NativeGroupedData(rowCount, groupCount);
@@ -68,8 +66,10 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                 int* pOffsets = resultNative.Offsets.Ptr;
                 int* pIndices = resultNative.Indices.Ptr;
 
+                // 1. Reset Offsets
                 new Span<int>(pOffsets, groupCount + 1).Fill(0);
 
+                // 2. Histogram
                 for (int i = 0; i < rowCount; i++)
                 {
                     int gid = pRowToGroupId[i];
@@ -79,6 +79,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                     }
                 }
 
+                // 3. Prefix Sum
                 int currentOffset = 0;
                 int* pWriteHeads = (int*)NativeMemory.Alloc((nuint)(groupCount * sizeof(int)));
 
@@ -91,6 +92,7 @@ namespace LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies
                 }
                 pOffsets[groupCount] = currentOffset;
 
+                // 4. Scatter
                 for (int i = 0; i < rowCount; i++)
                 {
                     int gid = pRowToGroupId[i];

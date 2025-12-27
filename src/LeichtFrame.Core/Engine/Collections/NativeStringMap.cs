@@ -34,7 +34,6 @@ namespace LeichtFrame.Core.Engine.Collections
         private const int GroupSize = 32;
 
         public int Count => _count;
-
         public int Capacity => _capacity;
 
         public NativeStringMap(int initialCapacity, byte* sourceBytes, int* sourceOffsets)
@@ -78,6 +77,7 @@ namespace LeichtFrame.Core.Engine.Collections
             int len = _sourceOffsets[rowIndex + 1] - start;
 
             int prefix = 0;
+            // Optimierter Prefix Load
             if (len >= 4)
             {
                 prefix = Unsafe.ReadUnaligned<int>(_sourceBytes + start);
@@ -92,9 +92,12 @@ namespace LeichtFrame.Core.Engine.Collections
             while (true)
             {
                 Vector256<byte> ctrlGroup = Vector256.Load(_ctrl + idx);
-                Vector256<byte> matchH2 = Vector256.Equals(ctrlGroup, Vector256.Create(h2));
-                Vector256<byte> matchEmpty = Vector256.Equals(ctrlGroup, Vector256.Create(Empty));
-                int mask = Avx2.MoveMask(matchH2 | matchEmpty);
+
+                // SIMD Match Finder: Suche H2 oder Empty
+                int mask = Avx2.MoveMask(
+                    Vector256.Equals(ctrlGroup, Vector256.Create(h2)) |
+                    Vector256.Equals(ctrlGroup, Vector256.Create(Empty))
+                );
 
                 while (mask != 0)
                 {
@@ -106,24 +109,19 @@ namespace LeichtFrame.Core.Engine.Collections
                     {
                         // --- INSERT ---
                         _ctrl[realIdx] = h2;
-
-                        // Fill German Cache
                         _lengths[realIdx] = len;
                         _prefixes[realIdx] = prefix;
-
-                        // Fill Payload
                         _rowIndices[realIdx] = rowIndex;
+
                         int newGroupId = _count;
                         _groupIds[realIdx] = newGroupId;
                         _count++;
 
                         if (realIdx < GroupSize) _ctrl[realIdx + _capacity] = h2;
-
                         return newGroupId;
                     }
-                    else if (foundCtrl == h2)
+                    else
                     {
-                        // --- MATCH CHECK ---
                         if (_lengths[realIdx] == len && _prefixes[realIdx] == prefix)
                         {
                             if (SeqEqual(rowIndex, _rowIndices[realIdx], len))
@@ -144,12 +142,50 @@ namespace LeichtFrame.Core.Engine.Collections
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool SeqEqual(int rowA, int rowB, int len)
         {
-            int startA = _sourceOffsets[rowA];
-            int startB = _sourceOffsets[rowB];
+            byte* pA = _sourceBytes + _sourceOffsets[rowA];
+            byte* pB = _sourceBytes + _sourceOffsets[rowB];
 
-            var spanA = new ReadOnlySpan<byte>(_sourceBytes + startA, len);
-            var spanB = new ReadOnlySpan<byte>(_sourceBytes + startB, len);
-            return spanA.SequenceEqual(spanB);
+            if (Avx2.IsSupported && len >= 32)
+            {
+                Vector256<byte> vecA = Avx2.LoadVector256(pA);
+                Vector256<byte> vecB = Avx2.LoadVector256(pB);
+
+                int mask = Avx2.MoveMask(Avx2.CompareEqual(vecA, vecB));
+
+                if (mask != -1) return false;
+
+                int offset = len - 32;
+                vecA = Avx2.LoadVector256(pA + offset);
+                vecB = Avx2.LoadVector256(pB + offset);
+
+                mask = Avx2.MoveMask(Avx2.CompareEqual(vecA, vecB));
+                return mask == -1;
+            }
+
+            return new ReadOnlySpan<byte>(pA, len).SequenceEqual(new ReadOnlySpan<byte>(pB, len));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ExportRowIndicesTo(int* destination)
+        {
+            for (int i = 0; i < _capacity; i++)
+            {
+                if (_ctrl[i] != 0)
+                {
+                    int id = _groupIds[i];
+                    destination[id] = _rowIndices[i];
+                }
+            }
+        }
+
+        public int[] ExportKeysAsRowIndices()
+        {
+            var result = new int[_count];
+            fixed (int* pRes = result)
+            {
+                ExportRowIndicesTo(pRes);
+            }
+            return result;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -175,10 +211,8 @@ namespace LeichtFrame.Core.Engine.Collections
                 {
                     int rowIdx = oldRowIndices[i];
                     int len = oldLengths[i];
-
                     int hash = ComputeHashForResize(rowIdx, len);
                     byte h2 = oldCtrl[i];
-
                     int idx = hash & _mask;
 
                     while (true)
@@ -208,7 +242,6 @@ namespace LeichtFrame.Core.Engine.Collections
 
         private int ComputeHashForResize(int rowIndex, int len)
         {
-            // Simple FNV-1a recalculation locally
             int start = _sourceOffsets[rowIndex];
             int hash = unchecked((int)2166136261);
             byte* pStr = _sourceBytes + start;
@@ -218,29 +251,6 @@ namespace LeichtFrame.Core.Engine.Collections
                 hash *= 16777619;
             }
             return hash;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ExportRowIndicesTo(int* destination)
-        {
-            for (int i = 0; i < _capacity; i++)
-            {
-                if (_ctrl[i] != 0)
-                {
-                    int id = _groupIds[i];
-                    destination[id] = _rowIndices[i];
-                }
-            }
-        }
-
-        public int[] ExportKeysAsRowIndices()
-        {
-            var result = new int[_count];
-            fixed (int* pRes = result)
-            {
-                ExportRowIndicesTo(pRes);
-            }
-            return result;
         }
 
         private static int NextPowerOfTwo(int x) => (int)BitOperations.RoundUpToPowerOf2((uint)x);

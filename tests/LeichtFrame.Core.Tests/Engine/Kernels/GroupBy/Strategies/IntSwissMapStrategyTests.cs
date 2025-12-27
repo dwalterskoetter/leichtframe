@@ -1,4 +1,5 @@
 using LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies;
+using FluentAssertions;
 
 namespace LeichtFrame.Core.Tests.Engine
 {
@@ -65,6 +66,56 @@ namespace LeichtFrame.Core.Tests.Engine
                 }
             }
             Assert.True(foundNull);
+        }
+
+        [Fact]
+        public void Group_SparseInts_ShouldUseBulkInsertAndBeCorrect()
+        {
+            int count = 100_000;
+            var col = new IntColumn("Val", count, isNullable: false);
+            var rnd = new Random(42);
+
+            for (int i = 0; i < count; i++)
+            {
+                col.Append(rnd.Next(0, 2_000_000));
+            }
+
+            var df = new DataFrame(new IColumn[] { col });
+            var strategy = new IntSwissMapStrategy();
+
+            using var gdf = strategy.Group(df, "Val");
+
+            int sumCounts = 0;
+            foreach (var (key, c) in gdf.CountStream())
+            {
+                sumCounts += c;
+            }
+            sumCounts.Should().Be(count, "Summe aller Gruppen-Counts muss RowCount entsprechen");
+
+            var expectedGroups = col.Values.ToArray().GroupBy(x => x).Count();
+            gdf.GroupCount.Should().Be(expectedGroups, "Anzahl der Gruppen muss mit LINQ übereinstimmen");
+        }
+
+        [Fact]
+        public void Group_NullableInts_ShouldUseFallbackPath()
+        {
+            var col = new IntColumn("Val", 100, isNullable: true);
+            col.Append(10);
+            col.Append(null);
+            col.Append(20);
+            col.Append(10);
+            col.Append(null);
+
+            var df = new DataFrame(new IColumn[] { col });
+            var strategy = new IntSwissMapStrategy();
+
+            using var gdf = strategy.Group(df, "Val");
+
+            gdf.GroupCount.Should().Be(2);
+            gdf.NullGroupIndices.Should().HaveCount(2);
+
+            var keys = (int[])gdf.GetKeys();
+            keys.Should().Contain(new[] { 10, 20 });
         }
     }
 }
