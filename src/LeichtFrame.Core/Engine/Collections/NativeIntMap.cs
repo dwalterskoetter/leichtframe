@@ -199,6 +199,47 @@ namespace LeichtFrame.Core.Engine.Collections
             return (int)BitOperations.RoundUpToPowerOf2((uint)x);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void BulkInsert(int* inputValues, int* outputGroupIds, int count)
+        {
+            const int PrefetchDistance = 16;
+
+            int mask = _mask;
+            byte* ctrl = _ctrl;
+            int* keys = _keys;
+            int* groupIds = _groupIds;
+            int capacity = _capacity;
+
+            int i = 0;
+
+            int limit = Math.Min(count, PrefetchDistance);
+            for (; i < limit; i++)
+            {
+                int key = inputValues[i];
+                int hash = Hash(key);
+                int idx = hash & mask;
+                Sse.Prefetch0(ctrl + idx);
+            }
+
+            int procIdx = 0;
+            for (; i < count; i++, procIdx++)
+            {
+                int nextKey = inputValues[i];
+                int nextHash = Hash(nextKey);
+                int nextIdx = nextHash & mask;
+                Sse.Prefetch0(ctrl + nextIdx);
+
+                int key = inputValues[procIdx];
+
+                outputGroupIds[procIdx] = GetOrAdd(key);
+            }
+
+            for (; procIdx < count; procIdx++)
+            {
+                outputGroupIds[procIdx] = GetOrAdd(inputValues[procIdx]);
+            }
+        }
+
         public void Dispose()
         {
             if (_ctrl != null) { NativeMemory.Free(_ctrl); _ctrl = null; }

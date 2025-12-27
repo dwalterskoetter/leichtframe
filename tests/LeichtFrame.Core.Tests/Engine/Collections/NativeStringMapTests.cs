@@ -1,4 +1,6 @@
 using LeichtFrame.Core.Engine.Collections;
+using LeichtFrame.Core.Engine.Kernels.GroupBy.Strategies;
+using FluentAssertions;
 
 namespace LeichtFrame.Core.Tests.Engine.Collections
 {
@@ -82,6 +84,35 @@ namespace LeichtFrame.Core.Tests.Engine.Collections
                 Assert.Equal(count, map.Count);
                 Assert.True(map.Capacity >= count);
             }
+        }
+
+        [Fact]
+        public void Group_HighCardUUIDs_ShouldTriggerAVX2Path()
+        {
+            var col = new StringColumn("UUID", 1000);
+
+            string baseUuid = "12345678-1234-1234-1234-123456789012";
+
+            col.Append(baseUuid);
+            col.Append(baseUuid);
+
+            col.Append("9" + baseUuid.Substring(1));
+
+            col.Append(baseUuid.Substring(0, 35) + "X");
+
+            char[] chars = baseUuid.ToCharArray();
+            chars[31] = 'X';
+            col.Append(new string(chars));
+
+            var df = new DataFrame(new IColumn[] { col });
+            var strategy = new StringSwissMapStrategy();
+
+            using var gdf = strategy.Group(df, "UUID");
+
+            gdf.GroupCount.Should().Be(4);
+
+            var counts = gdf.Count().Columns[1] as IntColumn;
+            counts!.Values.ToArray().Should().Contain(2);
         }
     }
 }
